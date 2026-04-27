@@ -1,0 +1,6 @@
+{
+  "name": "PostByteCL",
+  "description": "Anonymous imageboard forum with a minimalist 4chan-like style, featuring boards, threads, images, and admin moderation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

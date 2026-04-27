@@ -1,0 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Tahoma:wght@400;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tahoma", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Green + khaki palette */
+  --color-board-bg: #d9d2b6;         /* khaki background */
+  --color-post-bg: #dfe6c8;          /* panel bg */
+  --color-reply-bg: #d3e2c8;         /* reply bg */
+  --color-post-highlight: #c8ddbd;   /* highlight */
+  --color-post-header: #1b3a1b;      /* header/author green */
+  --color-link: #1f4d2a;             /* link green */
+  --color-link-hover: #0f7a3b;       /* link hover */
+  --color-border: #8ea47f;           /* borders */
+  --color-reply-border: #7f9a73;     /* reply borders */
+  --color-accent: #2f6b3f;           /* buttons/labels */
+  --color-accent-hover: #245733;
+  --color-muted: #4b5d4a;            /* secondary text */
+  --color-danger-bg: #d8c2b3;        /* warning/danger bg (still earthy) */
+  --color-danger-border: #8e3b2f;    /* danger border */
+}
+
+@layer base {
+  body {
+    @apply text-[#1b2b1b] font-sans text-[13px] leading-relaxed;
+    background-color: var(--color-board-bg);
+    background-image:
+      radial-gradient(circle at 10% 10%, rgba(111, 189, 116, 0.35) 0%, rgba(111, 189, 116, 0) 35%),
+      radial-gradient(circle at 85% 20%, rgba(235, 198, 99, 0.30) 0%, rgba(235, 198, 99, 0) 40%),
+      radial-gradient(circle at 20% 80%, rgba(104, 170, 225, 0.28) 0%, rgba(104, 170, 225, 0) 42%),
+      radial-gradient(circle at 80% 85%, rgba(200, 123, 214, 0.22) 0%, rgba(200, 123, 214, 0) 38%),
+      linear-gradient(160deg, #d9d2b6 0%, #d7dfc0 40%, #d2dbc4 70%, #d6d0b4 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--color-post-header);
+    outline-offset: 1px;
+  }
+}
+
+.post {
+  @apply bg-[var(--color-reply-bg)] border border-[var(--color-reply-border)] p-2 mb-1 inline-block min-w-[300px] max-w-full shadow-sm;
+}
+
+.op-post {
+  @apply bg-transparent border-none p-0 inline-block w-full mb-4;
+}
+
+.op-header {
+  @apply text-[var(--color-post-header)] font-bold text-base mb-1;
+}
+
+.reply-container {
+  @apply flex gap-2;
+}
+
+.reply-side {
+  @apply border-l-2 border-l-[var(--color-border)] border-b-2 border-b-[var(--color-border)] w-4 h-4 ml-4 mt-2;
+}
+
+.quote {
+  @apply text-[#3d6b2f];
+}
+
+.post-id {
+  @apply text-[#1b2b1b] font-bold cursor-pointer hover:text-[var(--color-link-hover)];
+}
+
+.post-link {
+  @apply text-[var(--color-link)] underline cursor-pointer hover:text-[var(--color-link-hover)];
+}
+
+.board-banner {
+  @apply text-center py-4 border-b border-[var(--color-border)] mb-4;
+}
+
+.board-title {
+  @apply text-[28px] font-bold text-[var(--color-post-header)] tracking-tight;
+}
+
+.admin-panel {
+  @apply bg-[var(--color-post-bg)] text-[#1b2b1b] font-sans;
+}
+
+.promo-box {
+  @apply border border-[var(--color-border)] bg-[var(--color-post-bg)] shadow-sm inline-block mx-auto;
+}
+
+.promo-boxbar {
+  @apply bg-[var(--color-accent)] text-white px-2 py-1 flex items-center justify-between;
+}
+
+.promo-boxbar h2 {
+  @apply text-xs font-bold m-0;
+}
+
+.promo-closebutton {
+  @apply border border-white/50 bg-white/15 text-white w-5 h-5 leading-none cursor-pointer hover:bg-white/25;
+}
+
+.promo-boxcontent {
+  @apply p-1 text-[11px] flex items-center justify-center;
+}
+
+.promo-gif-wrap {
+  @apply w-[180px] h-[180px] shrink-0;
+}
+
+.promo-gif {
+  @apply w-[180px] h-[180px] border border-[var(--color-border)] bg-white object-cover;
+}
+

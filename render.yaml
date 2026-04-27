@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: postbytecl-api
+    runtime: python
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: bash backend/start-render.sh
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.2
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_PATH
+        value: /var/data/postbyte.db
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: MAX_UPLOAD_BYTES
+        value: "5242880"
+      - key: CORS_ORIGINS
+        value: https://postbytecl-web.onrender.com
+      - key: ADMIN_KEY
+        generateValue: true
+    disk:
+      name: postbytecl-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  - type: static
+    name: postbytecl-web
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://postbytecl-api.onrender.com
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+

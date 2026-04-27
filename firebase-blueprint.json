@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered accounts on the platform",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "moderator", "user"] },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Board": {
+      "title": "Board",
+      "description": "A category for threads (e.g., /b/ Random)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Short ID like 'b', 'v', 'a'" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "rules": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Thread": {
+      "title": "Thread",
+      "description": "A collection of posts starting with an OP",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "boardId": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastBump": { "type": "string", "format": "date-time" },
+        "isArchived": { "type": "boolean" },
+        "isPinned": { "type": "boolean" },
+        "isLocked": { "type": "boolean" },
+        "replyCount": { "type": "number" },
+        "imageCount": { "type": "number" }
+      },
+      "required": ["boardId", "createdAt", "lastBump"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "An individual message within a thread",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "threadId": { "type": "string" },
+        "boardId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "image": {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string" },
+            "filename": { "type": "string" },
+            "width": { "type": "number" },
+            "height": { "type": "number" },
+            "size": { "type": "number" }
+          }
+        },
+        "ip": { "type": "string" },
+        "isOp": { "type": "boolean" }
+      },
+      "required": ["threadId", "boardId", "content", "createdAt"]
+    },
+    "Ban": {
+      "title": "Ban",
+      "description": "Blocked IPs or users",
+      "type": "object",
+      "properties": {
+        "ip": { "type": "string" },
+        "reason": { "type": "string" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      }
+    },
+    "Report": {
+      "title": "Report",
+      "description": "User reports on posts",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "threadId": { "type": "string" },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Staff accounts"
+    },
+    "/boards/{boardId}": {
+      "schema": "Board",
+      "description": "Forum boards"
+    },
+    "/boards/{boardId}/threads/{threadId}": {
+      "schema": "Thread",
+      "description": "Threads within a board"
+    },
+    "/boards/{boardId}/threads/{threadId}/posts/{postId}": {
+      "schema": "Post",
+      "description": "Posts within a thread"
+    },
+    "/bans/{banId}": {
+      "schema": "Ban",
+      "description": "Active bans"
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Post reports"
+    }
+  }
+}

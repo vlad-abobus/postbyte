@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; }
+    function isMod() { return isSignedIn() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'moderator']; }
+    function isStaff() { return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
+    
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Schemas ---
+    function isValidBoard(data) {
+      return data.keys().hasAll(['id', 'name', 'category', 'createdAt', 'description']) &&
+             data.id is string && data.id.size() <= 10 &&
+             data.name is string && data.name.size() <= 50 &&
+             data.category is string && data.category.size() <= 30;
+    }
+
+    function isValidThread(data) {
+      return data.keys().hasAll(['boardId', 'title', 'createdAt', 'lastBump', 'isArchived', 'isPinned', 'isLocked', 'replyCount', 'imageCount']) &&
+             data.boardId is string && data.boardId.size() <= 10 &&
+             data.title is string && data.title.size() <= 100 &&
+             data.replyCount is number && data.imageCount is number;
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['threadId', 'boardId', 'authorName', 'content', 'createdAt', 'isOp']) &&
+             data.threadId is string && data.threadId.size() <= 128 &&
+             data.content is string && data.content.size() <= 5000 &&
+             data.authorName is string && data.authorName.size() <= 50;
+    }
+
+    // --- Rules ---
+
+    // USERS (Registered Accounts)
+    match /users/{uid} {
+      allow read: if true; // Public profiles
+      // Users can create/sync their own profile
+      allow create: if isSignedIn() && request.auth.uid == uid;
+      // Users can update their own profile bio/name/photo
+      allow update: if isSignedIn() && request.auth.uid == uid && 
+                     incoming().role == existing().role; // Cannot change own role
+      allow delete: if isAdmin();
+    }
+
+    // BOARDS
+    match /boards/{boardId} {
+      allow read: if true;
+      allow create, update: if isAdmin() && isValidBoard(incoming());
+      allow delete: if isAdmin();
+
+      // THREADS
+      match /threads/{threadId} {
+        allow list: if true;
+        allow get: if true;
+        allow create: if isValidThread(incoming()) && exists(/databases/$(database)/documents/boards/$(boardId));
+        allow update: if isMod() || (
+                       // Allowed updates for counting/bumping during replies
+                       incoming().diff(existing()).affectedKeys().hasOnly(['replyCount', 'imageCount', 'lastBump']) &&
+                       !existing().isLocked
+                     );
+        allow delete: if isMod();
+
+        // POSTS
+        match /posts/{postId} {
+          allow list: if true;
+          allow get: if true;
+          allow create: if isValidPost(incoming()) && 
+                         exists(/databases/$(database)/documents/boards/$(boardId)/threads/$(threadId)) &&
+                         !get(/databases/$(database)/documents/boards/$(boardId)/threads/$(threadId)).data.isLocked;
+          allow update, delete: if isMod();
+        }
+      }
+    }
+
+    // REPORTS
+    match /reports/{reportId} {
+      allow read: if isStaff();
+      allow create: if true; // Guests can report
+      allow update, delete: if isStaff();
+    }
+
+    // BANS
+    match /bans/{banId} {
+      allow read: if isStaff();
+      allow write: if isMod();
+    }
+  }
+}

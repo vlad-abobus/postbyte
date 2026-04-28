@@ -9,6 +9,12 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _iso_or_now(value: datetime | None) -> str:
+    if value is None:
+        return utcnow().isoformat()
+    return value.isoformat()
+
+
 class User(db.Model):
     __tablename__ = "users"
 
@@ -29,7 +35,7 @@ class User(db.Model):
             "displayName": self.username,
             "photoURL": self.photo_url or "",
             "bio": self.bio or "",
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
         }
 
 
@@ -52,7 +58,7 @@ class Board(db.Model):
             "description": self.description,
             "category": self.category,
             "rules": self.rules,
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
         }
 
 
@@ -78,8 +84,8 @@ class Thread(db.Model):
             "id": str(self.id),
             "boardId": self.board_id,
             "title": self.title,
-            "createdAt": self.created_at.isoformat(),
-            "lastBump": self.last_bump.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
+            "lastBump": _iso_or_now(self.last_bump),
             "isArchived": self.is_archived,
             "isPinned": self.is_pinned,
             "isLocked": self.is_locked,
@@ -133,7 +139,7 @@ class Post(db.Model):
             "authorUid": author_uid,
             "authorRole": author_role,
             "content": self.content,
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
             "image": image,
             "ip": self.ip,
             "isOp": self.is_op,
@@ -159,7 +165,7 @@ class Report(db.Model):
             "postId": str(self.post_id),
             "reason": self.reason,
             "status": self.status,
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
         }
 
 
@@ -182,7 +188,7 @@ class IpBan(db.Model):
             "ip": self.ip,
             "reason": self.reason,
             "expiresAt": self.expires_at.isoformat() if self.expires_at else None,
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
             "createdBy": str(self.created_by_user_id) if self.created_by_user_id else None,
             "active": self.active,
             "type": "ban",
@@ -208,7 +214,7 @@ class IpMute(db.Model):
             "ip": self.ip,
             "reason": self.reason,
             "expiresAt": self.expires_at.isoformat() if self.expires_at else None,
-            "createdAt": self.created_at.isoformat(),
+            "createdAt": _iso_or_now(self.created_at),
             "createdBy": str(self.created_by_user_id) if self.created_by_user_id else None,
             "active": self.active,
             "type": "mute",

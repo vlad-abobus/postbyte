@@ -28,7 +28,7 @@ export function SitePromoBox() {
         {!imageHidden ? (
           <div className="promo-gif-wrap">
             <img
-              src="https://media.tenor.com/K9fEG4M2f3AAAAAC/hatsune-miku.gif"
+              src="/miku-vocaloid.gif"
               alt="Miku promo"
               className="promo-gif"
               onError={() => setImageHidden(true)}

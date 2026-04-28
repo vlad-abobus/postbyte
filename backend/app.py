@@ -687,8 +687,7 @@ def _run_schema_migrations_if_needed() -> None:
             ("users", "photo_url", "ALTER TABLE users ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''"),
             ("posts", "author_user_id", "ALTER TABLE posts ADD COLUMN author_user_id INTEGER"),
         ]:
-            cols = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()}
-            if col not in cols:
+            if not _column_exists(table, col):
                 conn.exec_driver_sql(ddl)
 
         # Rename board id `miku` -> `nfsw` and keep related data.

@@ -9,8 +9,11 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import cloudinary
-import cloudinary.uploader
+try:
+    import cloudinary
+    import cloudinary.uploader
+except Exception:
+    cloudinary = None
 from dotenv import load_dotenv
 from flask import Flask, abort, current_app, jsonify, request, send_from_directory, session
 from flask_cors import CORS
@@ -33,24 +36,31 @@ def create_app() -> Flask:
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
-    db_path_raw = os.getenv("DATABASE_PATH", "postbyte.db")
-    db_path = Path(db_path_raw)
-    if not db_path.is_absolute():
-        # Keep relative DATABASE_PATH stable regardless of where Flask command is launched from.
-        project_root = Path(__file__).resolve().parent.parent
-        db_path = project_root / db_path
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.resolve().as_posix()}"
+    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    if not database_url:
+        database_url = "postgresql+psycopg://postgres:postgres@localhost:5432/postbytecl"
+    elif database_url.startswith("postgres://"):
+        # Some providers still expose the old scheme; SQLAlchemy expects postgresql://.
+        database_url = "postgresql://" + database_url[len("postgres://") :]
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-    uploads_dir = Path(os.getenv("UPLOADS_DIR", "uploads")).resolve()
-    uploads_dir.mkdir(parents=True, exist_ok=True)
+    uploads_dir_raw = os.getenv("UPLOADS_DIR", "uploads")
+    uploads_dir = Path(uploads_dir_raw).resolve()
+    try:
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # On some hosts (e.g. misconfigured Render service without a mounted disk),
+        # absolute paths like /var/data may be unavailable. Fallback to local uploads.
+        fallback_uploads_dir = (Path(__file__).resolve().parent.parent / "uploads").resolve()
+        fallback_uploads_dir.mkdir(parents=True, exist_ok=True)
+        uploads_dir = fallback_uploads_dir
     app.config["UPLOADS_DIR"] = str(uploads_dir)
 
     cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
     cloud_api_key = os.getenv("CLOUDINARY_API_KEY")
     cloud_api_secret = os.getenv("CLOUDINARY_API_SECRET")
-    app.config["CLOUDINARY_ENABLED"] = bool(cloud_name and cloud_api_key and cloud_api_secret)
+    app.config["CLOUDINARY_ENABLED"] = bool(cloudinary and cloud_name and cloud_api_key and cloud_api_secret)
     app.config["CLOUDINARY_FOLDER"] = os.getenv("CLOUDINARY_FOLDER", "postbytecl")
     if app.config["CLOUDINARY_ENABLED"]:
         cloudinary.config(
@@ -72,7 +82,7 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_default_boards()
-        _run_sqlite_migrations()
+        _run_sqlite_migrations_if_needed()
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):
@@ -622,7 +632,9 @@ def create_app() -> Flask:
     return app
 
 
-def _run_sqlite_migrations() -> None:
+def _run_sqlite_migrations_if_needed() -> None:
+    if db.engine.dialect.name != "sqlite":
+        return
     # Tiny "migration" layer for SQLite without Alembic:
     # add new columns if they don't exist yet.
     engine = db.engine

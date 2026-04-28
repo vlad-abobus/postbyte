@@ -1,6 +1,6 @@
 # Flask backend for PostByteCL
 
-This replaces the Firebase (Firestore/Storage) layer with a Flask + SQLite API.
+This replaces the Firebase (Firestore/Storage) layer with a Flask + PostgreSQL API.
 
 ## Run
 
@@ -22,7 +22,8 @@ Uploads are served from `http://localhost:5000/uploads/<file>`.
 
 ## Environment variables
 
-- `DATABASE_PATH`: SQLite file path (default `postbyte.db`)
+- `DATABASE_URL`: PostgreSQL SQLAlchemy URL  
+  Example: `postgresql+psycopg://postgres:postgres@localhost:5432/postbytecl`
 - `UPLOADS_DIR`: upload folder (default `uploads`)
 - `MAX_UPLOAD_BYTES`: max upload size in bytes (default 5MB)
 - `CORS_ORIGINS`: comma-separated origins allowed to call `/api/*` (default `http://localhost:3000`)

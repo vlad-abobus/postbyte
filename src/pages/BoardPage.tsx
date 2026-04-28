@@ -27,7 +27,7 @@ export function BoardPage() {
     }
   }, [boardId]);
 
-  if (loading) return <div className="p-4 font-mono">Loading board...</div>;
+  if (loading) return <div className="p-4 font-mono">Мы грузим подключение к серверу</div>;
   if (!board) return <div className="p-4 font-mono text-red-600">Fuck you!</div>;
   if (!board) return <div className="p-4 font-mono text-red-600">Board not found ! Fuck you !</div>;
 

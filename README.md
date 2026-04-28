@@ -1,5 +1,5 @@
 <div align="center">
-
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
 # Run locally (Flask backend + React frontend)
@@ -28,7 +28,7 @@ See `backend/README.md`.
 
 This repo is preconfigured for Render Blueprint deploy with two services:
 
-- `postbytecl-api` (Flask API + uploads + SQLite on persistent disk)
+- `postbytecl-api` (Flask API + uploads + PostgreSQL)
 - `postbytecl-web` (React static site)
 
 ### One-click Blueprint flow
@@ -46,6 +46,5 @@ This repo is preconfigured for Render Blueprint deploy with two services:
 
 ### Persisted data
 
-- Database path: `/var/data/postbyte.db`
 - Uploads path: `/var/data/uploads`
-- Persistent disk is declared in `render.yaml` (`postbytecl-data`).
+- Persistent disk is used for uploads only.

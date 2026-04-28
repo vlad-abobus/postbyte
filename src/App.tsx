@@ -86,8 +86,8 @@ export default function App() {
         </main>
 
         <footer className="text-center py-8 text-[10px] text-[var(--color-muted)] border-top border-[var(--color-border)] mt-8">
-          <p>© 2026 PostByteCL - All Rights Reserved</p>
-          <p>This imageboard is for experimental purposes.</p>
+          <p>Это PostByte</p>
+          <p>2026</p>
         </footer>
       </div>
     </BrowserRouter>

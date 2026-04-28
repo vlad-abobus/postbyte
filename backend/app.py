@@ -35,7 +35,6 @@ def create_app() -> Flask:
     app.config["JSON_SORT_KEYS"] = False
     app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(32))
-    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     database_url = (os.getenv("DATABASE_URL") or "").strip()
@@ -73,9 +72,34 @@ def create_app() -> Flask:
         )
 
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    parsed_cors_origins = [o.strip() for o in cors_origins if o.strip()]
+
+    # Captcha/session auth relies on browser cookies. For cross-origin frontend/api
+    # deployments (e.g. separate Render domains), SameSite=None + Secure is required.
+    has_non_local_origin = any(
+        not (
+            origin.startswith("http://localhost")
+            or origin.startswith("https://localhost")
+            or origin.startswith("http://127.0.0.1")
+            or origin.startswith("https://127.0.0.1")
+        )
+        for origin in parsed_cors_origins
+    )
+    default_samesite = "None" if has_non_local_origin else "Lax"
+    samesite = (os.getenv("SESSION_COOKIE_SAMESITE") or default_samesite).strip()
+    if samesite.lower() == "none":
+        samesite = "None"
+    app.config["SESSION_COOKIE_SAMESITE"] = samesite
+
+    secure_env = os.getenv("SESSION_COOKIE_SECURE")
+    if secure_env is None:
+        app.config["SESSION_COOKIE_SECURE"] = samesite == "None"
+    else:
+        app.config["SESSION_COOKIE_SECURE"] = secure_env.strip().lower() in {"1", "true", "yes", "on"}
+
     CORS(
         app,
-        resources={r"/api/*": {"origins": [o.strip() for o in cors_origins if o.strip()]}},
+        resources={r"/api/*": {"origins": parsed_cors_origins}},
         supports_credentials=True,
     )
 

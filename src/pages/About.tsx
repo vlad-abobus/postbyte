@@ -23,9 +23,10 @@ export function About() {
 
         <h2 className="font-bold text-[var(--color-post-header)] mt-6">Технологии</h2>
         <p>
-          Тута у нас есть React, Flask, Tailwind CSS, и SQLite - неплохой стек для форума
+          Тута у нас есть React, Flask, Tailwind CSS, и PostgreSQL - неплохой стек для форума
           нам еще понадобится Cloudinary для хранения изображений и Cloudflare для CDN
           и Render для развертывания нашего форума
+          Но тута бесплатная версия у хостинге так шо если хотите поддержать развитие напишите 
         </p>
       </div>
 

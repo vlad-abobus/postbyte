@@ -9,6 +9,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from sqlalchemy import inspect
+
 try:
     import cloudinary
     import cloudinary.uploader
@@ -82,7 +84,7 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_default_boards()
-        _run_sqlite_migrations_if_needed()
+        _run_schema_migrations_if_needed()
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):
@@ -632,13 +634,54 @@ def create_app() -> Flask:
     return app
 
 
-def _run_sqlite_migrations_if_needed() -> None:
-    if db.engine.dialect.name != "sqlite":
-        return
-    # Tiny "migration" layer for SQLite without Alembic:
-    # add new columns if they don't exist yet.
+def _run_schema_migrations_if_needed() -> None:
+    # Tiny runtime migration layer without Alembic:
+    # add missing columns for older DBs to prevent startup/runtime failures.
     engine = db.engine
+    inspector = inspect(engine)
+    dialect_name = engine.dialect.name
+
+    def _column_exists(table: str, col: str) -> bool:
+        try:
+            columns = inspector.get_columns(table)
+        except Exception:
+            return False
+        return any(c.get("name") == col for c in columns)
+
+    board_created_at_default = (
+        "CURRENT_TIMESTAMP" if dialect_name == "sqlite" else "TIMEZONE('utc', NOW())"
+    )
+
     with engine.begin() as conn:
+        for table, col, ddl_sqlite, ddl_postgres in [
+            (
+                "boards",
+                "category",
+                "ALTER TABLE boards ADD COLUMN category TEXT NOT NULL DEFAULT 'Boards'",
+                "ALTER TABLE boards ADD COLUMN category VARCHAR(100) NOT NULL DEFAULT 'Boards'",
+            ),
+            (
+                "boards",
+                "rules",
+                "ALTER TABLE boards ADD COLUMN rules TEXT",
+                "ALTER TABLE boards ADD COLUMN rules TEXT",
+            ),
+            (
+                "boards",
+                "created_at",
+                f"ALTER TABLE boards ADD COLUMN created_at DATETIME NOT NULL DEFAULT {board_created_at_default}",
+                f"ALTER TABLE boards ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT {board_created_at_default}",
+            ),
+        ]:
+            if not _column_exists(table, col):
+                conn.exec_driver_sql(ddl_sqlite if dialect_name == "sqlite" else ddl_postgres)
+
+        # Keep current rows consistent for old databases.
+        conn.exec_driver_sql("UPDATE boards SET category='Boards' WHERE category IS NULL OR category=''")
+
+        if _column_exists("boards", "created_at"):
+            conn.exec_driver_sql("UPDATE boards SET created_at=CURRENT_TIMESTAMP WHERE created_at IS NULL")
+
         for table, col, ddl in [
             ("users", "bio", "ALTER TABLE users ADD COLUMN bio TEXT NOT NULL DEFAULT ''"),
             ("users", "photo_url", "ALTER TABLE users ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''"),

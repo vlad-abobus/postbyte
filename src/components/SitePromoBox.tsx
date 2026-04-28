@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 export function SitePromoBox() {
   const [hidden, setHidden] = useState(false);
+  const [imageHidden, setImageHidden] = useState(false);
 
   const close = () => {
     setHidden(true);
@@ -24,9 +25,19 @@ export function SitePromoBox() {
         </button>
       </div>
       <div className="promo-boxcontent">
-        <div className="promo-gif-wrap">
-          <img src="/miku-vocaloid.gif" alt="Miku promo" className="promo-gif" />
-        </div>
+        {!imageHidden ? (
+          <div className="promo-gif-wrap">
+            <img
+              src="https://media.tenor.com/K9fEG4M2f3AAAAAC/hatsune-miku.gif"
+              alt="Miku promo"
+              className="promo-gif"
+              onError={() => setImageHidden(true)}
+              loading="lazy"
+            />
+          </div>
+        ) : (
+          <p className="text-xs opacity-70">Miku promo is temporarily unavailable.</p>
+        )}
       </div>
     </div>
   );

@@ -1,38 +1,54 @@
 export function Rules() {
   return (
-    <div className="max-w-3xl mx-auto bg-[var(--color-post-bg)] border border-[var(--color-border)] p-6 shadow-sm">
-      <h1 className="text-2xl font-bold text-[var(--color-post-header)] border-b border-[var(--color-border)] mb-4 pb-2">Global Rules</h1>
-      
-      <div className="space-y-6 text-sm">
-        <section>
-          <h2 className="font-bold text-[var(--color-post-header)]">Общие правила</h2>
+    <div className="max-w-4xl mx-auto bg-[var(--color-post-bg)] border border-[var(--color-border)] p-6 md:p-8 shadow-sm">
+      <h1 className="text-2xl font-bold text-[var(--color-post-header)] border-b border-[var(--color-border)] mb-3 pb-2">
+        Правила PostByteCL
+      </h1>
+      <p className="text-sm opacity-80 mb-6">
+        Простір для нормального спілкування. Тут можна обговорювати техніку, життєві питання, навчання, побут і все,
+        де потрібна порада або підтримка.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2 text-sm">
+        <section className="border border-[var(--color-border)] p-4 bg-white/40">
+          <h2 className="font-bold text-[var(--color-post-header)]">1. База поваги</h2>
           <ul className="list-disc ml-5 mt-2 space-y-1">
-            <li>Пиши что угодно но не нарушай законы . Терористов мы сливаем фапкой</li>
-            <li>Нет спама или флуда пожалуйста.</li>
-            <li>Уважайте темы доски. Хотябы чучуть Строго наказывать не буду но пожалуйста!</li>
+            <li>Без погроз, булінгу, переслідування та мови ненависті.</li>
+            <li>Критикуй ідею, а не людину.</li>
+            <li>Незгода ок, токсичність - ні.</li>
           </ul>
         </section>
 
-        <section>
-          <h2 className="font-bold text-[var(--color-post-header)]">2. Постинг и изображения</h2>
+        <section className="border border-[var(--color-border)] p-4 bg-white/40">
+          <h2 className="font-bold text-[var(--color-post-header)]">2. Контент і якість</h2>
           <ul className="list-disc ml-5 mt-2 space-y-1">
-            <li>Дубликаты изображений в одном треде не нада.</li>
-            <li>Названия тредов должны быть описательными.</li>
-            <li>NSFW контент разрешен ТОЛЬКО на NFSW доске.</li>
+            <li>Не спам, не флуд, не дублюй однакові треди.</li>
+            <li>Додавай зрозумілий заголовок і суть питання в перших рядках.</li>
+            <li>Фейки, шахрайські схеми та незаконний контент видаляються.</li>
           </ul>
         </section>
 
-        <section>
-          <h2 className="font-bold text-[var(--color-post-header)]">3. Модерация</h2>
+        <section className="border border-[var(--color-border)] p-4 bg-white/40">
+          <h2 className="font-bold text-[var(--color-post-header)]">3. Дошка /help/</h2>
           <ul className="list-disc ml-5 mt-2 space-y-1">
-            <li>Админы имеют последнее слово. Если ты нарушаешь правила то ты будешь наказан.</li>
-            <li>Админы тут вроде норм . Если хочешь им сказать то напиши пост об этом </li>
+            <li>Дошка `/help/` для взаємодопомоги: техніка, життя, робота, навчання, побут.</li>
+            <li>Пиши контекст: що вже пробував, які помилки/симптоми, який результат хочеш.</li>
+            <li>Відповідай по суті, без принижень і "тролінгу заради тролінгу".</li>
+          </ul>
+        </section>
+
+        <section className="border border-[var(--color-border)] p-4 bg-white/40">
+          <h2 className="font-bold text-[var(--color-post-header)]">4. Модерація</h2>
+          <ul className="list-disc ml-5 mt-2 space-y-1">
+            <li>Порушення можуть призвести до видалення поста, муту або бану.</li>
+            <li>Рішення модерації фінальні, але конструктивний фідбек вітається.</li>
+            <li>Якщо бачиш порушення - використовуй репорт.</li>
           </ul>
         </section>
       </div>
 
-      <div className="mt-8 pt-4 border-t border-[var(--color-border)] text-[10px] opacity-70">
-        Последнее обновление: когда ты сидел на толчке ахахахаха
+      <div className="mt-8 pt-4 border-t border-[var(--color-border)] text-[11px] opacity-70">
+        Оновлено: квітень 2026
       </div>
     </div>
   );

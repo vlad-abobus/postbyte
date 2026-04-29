@@ -714,20 +714,27 @@ def _run_schema_migrations_if_needed() -> None:
             if not _column_exists(table, col):
                 conn.exec_driver_sql(ddl)
 
-        # Rename board id `miku` -> `nfsw` and keep related data.
+        # Consolidate legacy board ids into `help` and keep related data.
         has_miku = conn.exec_driver_sql("SELECT 1 FROM boards WHERE id='miku' LIMIT 1").fetchone() is not None
         has_nfsw = conn.exec_driver_sql("SELECT 1 FROM boards WHERE id='nfsw' LIMIT 1").fetchone() is not None
-        if has_miku and not has_nfsw:
-            conn.exec_driver_sql("UPDATE boards SET id='nfsw' WHERE id='miku'")
-            conn.exec_driver_sql("UPDATE threads SET board_id='nfsw' WHERE board_id='miku'")
-            conn.exec_driver_sql("UPDATE posts SET board_id='nfsw' WHERE board_id='miku'")
-            conn.exec_driver_sql("UPDATE reports SET board_id='nfsw' WHERE board_id='miku'")
-        elif has_miku and has_nfsw:
-            # If both exist, migrate references then drop old board row.
-            conn.exec_driver_sql("UPDATE threads SET board_id='nfsw' WHERE board_id='miku'")
-            conn.exec_driver_sql("UPDATE posts SET board_id='nfsw' WHERE board_id='miku'")
-            conn.exec_driver_sql("UPDATE reports SET board_id='nfsw' WHERE board_id='miku'")
-            conn.exec_driver_sql("DELETE FROM boards WHERE id='miku'")
+        has_help = conn.exec_driver_sql("SELECT 1 FROM boards WHERE id='help' LIMIT 1").fetchone() is not None
+
+        if has_miku and not has_help and not has_nfsw:
+            conn.exec_driver_sql("UPDATE boards SET id='help' WHERE id='miku'")
+            conn.exec_driver_sql("UPDATE threads SET board_id='help' WHERE board_id='miku'")
+            conn.exec_driver_sql("UPDATE posts SET board_id='help' WHERE board_id='miku'")
+            conn.exec_driver_sql("UPDATE reports SET board_id='help' WHERE board_id='miku'")
+        else:
+            if has_miku:
+                conn.exec_driver_sql("UPDATE threads SET board_id='help' WHERE board_id='miku'")
+                conn.exec_driver_sql("UPDATE posts SET board_id='help' WHERE board_id='miku'")
+                conn.exec_driver_sql("UPDATE reports SET board_id='help' WHERE board_id='miku'")
+                conn.exec_driver_sql("DELETE FROM boards WHERE id='miku'")
+            if has_nfsw:
+                conn.exec_driver_sql("UPDATE threads SET board_id='help' WHERE board_id='nfsw'")
+                conn.exec_driver_sql("UPDATE posts SET board_id='help' WHERE board_id='nfsw'")
+                conn.exec_driver_sql("UPDATE reports SET board_id='help' WHERE board_id='nfsw'")
+                conn.exec_driver_sql("DELETE FROM boards WHERE id='nfsw'")
 
 
 def _handle_image_upload() -> dict:
@@ -808,9 +815,9 @@ def _ensure_default_boards() -> None:
     """
     desired = [
         {
-            "id": "nfsw",
-            "name": "NFSW",
-            "description": "18+; здесь все картинки под спойлером.",
+            "id": "help",
+            "name": "Help",
+            "description": "Техпідтримка, поради по життю, питання та взаємодопомога.",
             "category": "Boards",
         },
         {

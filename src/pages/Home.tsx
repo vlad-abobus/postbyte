@@ -24,7 +24,7 @@ export function Home() {
     fetchBoards();
   }, []);
 
-  if (loading) return <div className="p-4 font-mono">Loading boards...</div>;
+  if (loading) return <div className="p-4 font-mono">Грузим подключение к серверу 1-3 минуты пожалуйста.</div>;
   if (error) return <div className="p-4 font-mono text-red-700">{error}</div>;
 
   const categories = Array.from(new Set(boards.map(b => b.category)));

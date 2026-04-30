@@ -31,7 +31,7 @@ export function Register() {
       await forumService.register({ email, username, password, captchaId, captchaAnswer });
       window.location.assign('/');
     } catch (e: any) {
-      setError(e.message || 'Register failed');
+      setError(e.message || 'Не удалось создать аккаунт');
       refreshCaptcha();
     } finally {
       setSubmitting(false);
@@ -40,7 +40,7 @@ export function Register() {
 
   return (
     <div className="max-w-md mx-auto bg-[var(--color-post-bg)] border border-[var(--color-border)] p-4">
-      <h1 className="text-lg font-bold text-[var(--color-post-header)] mb-3">Register</h1>
+      <h1 className="text-lg font-bold text-[var(--color-post-header)] mb-3">Регистрация</h1>
       <form onSubmit={onSubmit} className="space-y-3 text-xs">
         <div>
           <label className="block font-bold mb-1">Email</label>
@@ -52,7 +52,7 @@ export function Register() {
           />
         </div>
         <div>
-          <label className="block font-bold mb-1">Username</label>
+          <label className="block font-bold mb-1">Имя пользователя</label>
           <input
             className="w-full border border-[var(--color-border)] p-2 bg-white outline-none"
             value={username}
@@ -60,11 +60,11 @@ export function Register() {
             autoComplete="username"
           />
           <div className="text-[10px] text-[var(--color-muted)] mt-1">
-            3–32 chars: letters, numbers, underscore
+            3-32 символа: буквы, цифры и нижнее подчеркивание
           </div>
         </div>
         <div>
-          <label className="block font-bold mb-1">Password</label>
+          <label className="block font-bold mb-1">Пароль</label>
           <input
             className="w-full border border-[var(--color-border)] p-2 bg-white outline-none"
             type="password"
@@ -75,12 +75,12 @@ export function Register() {
         </div>
 
         <div>
-          <label className="block font-bold mb-1">Captcha</label>
+          <label className="block font-bold mb-1">Капча</label>
           <div className="flex items-center gap-2">
             {captchaImage && (
               <img
                 src={captchaImage}
-                alt="captcha"
+                alt="Капча"
                 className="border border-[var(--color-border)] bg-white select-none"
                 draggable={false}
               />
@@ -90,7 +90,7 @@ export function Register() {
               onClick={refreshCaptcha}
               className="post-link bg-transparent border-none p-0"
             >
-              Refresh
+              Обновить
             </button>
           </div>
           <input
@@ -107,12 +107,12 @@ export function Register() {
           disabled={submitting}
           className="bg-[var(--color-accent)] text-white font-bold p-2 w-full hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
         >
-          {submitting ? '...' : 'Create account'}
+          {submitting ? '...' : 'Создать аккаунт'}
         </button>
       </form>
 
       <div className="text-[10px] mt-3 text-[var(--color-muted)]">
-        Have an account? <Link to="/login" className="post-link">Login</Link>
+        Уже есть аккаунт? <Link to="/login" className="post-link">Войти</Link>
       </div>
     </div>
   );

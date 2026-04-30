@@ -30,7 +30,7 @@ export function Login() {
       await forumService.login({ login, password, captchaId, captchaAnswer });
       window.location.assign('/');
     } catch (e: any) {
-      setError(e.message || 'Login failed');
+      setError(e.message || 'Не удалось войти');
       refreshCaptcha();
     } finally {
       setSubmitting(false);
@@ -39,10 +39,10 @@ export function Login() {
 
   return (
     <div className="max-w-md mx-auto bg-[var(--color-post-bg)] border border-[var(--color-border)] p-4">
-      <h1 className="text-lg font-bold text-[var(--color-post-header)] mb-3">Login</h1>
+      <h1 className="text-lg font-bold text-[var(--color-post-header)] mb-3">Вход</h1>
       <form onSubmit={onSubmit} className="space-y-3 text-xs">
         <div>
-          <label className="block font-bold mb-1">Email or Username</label>
+          <label className="block font-bold mb-1">Email или имя пользователя</label>
           <input
             className="w-full border border-[var(--color-border)] p-2 bg-white outline-none"
             value={login}
@@ -51,7 +51,7 @@ export function Login() {
           />
         </div>
         <div>
-          <label className="block font-bold mb-1">Password</label>
+          <label className="block font-bold mb-1">Пароль</label>
           <input
             className="w-full border border-[var(--color-border)] p-2 bg-white outline-none"
             type="password"
@@ -62,12 +62,12 @@ export function Login() {
         </div>
 
         <div>
-          <label className="block font-bold mb-1">Captcha</label>
+          <label className="block font-bold mb-1">Капча</label>
           <div className="flex items-center gap-2">
             {captchaImage && (
               <img
                 src={captchaImage}
-                alt="captcha"
+                alt="Капча"
                 className="border border-[var(--color-border)] bg-white select-none"
                 draggable={false}
               />
@@ -77,7 +77,7 @@ export function Login() {
               onClick={refreshCaptcha}
               className="post-link bg-transparent border-none p-0"
             >
-              Refresh
+              Обновить
             </button>
           </div>
           <input
@@ -94,12 +94,12 @@ export function Login() {
           disabled={submitting}
           className="bg-[var(--color-accent)] text-white font-bold p-2 w-full hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
         >
-          {submitting ? '...' : 'Login'}
+          {submitting ? '...' : 'Войти'}
         </button>
       </form>
 
       <div className="text-[10px] mt-3 text-[var(--color-muted)]">
-        No account? <Link to="/register" className="post-link">Register</Link>
+        Нет аккаунта? <Link to="/register" className="post-link">Зарегистрироваться</Link>
       </div>
     </div>
   );

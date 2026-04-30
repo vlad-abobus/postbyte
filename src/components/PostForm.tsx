@@ -105,14 +105,14 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
     setError('');
 
     if (userCaptcha.toUpperCase() !== captcha) {
-      setError('Incorrect captcha');
+      setError('Неверная капча');
       setCaptcha(generateCaptcha());
       setUserCaptcha('');
       return;
     }
 
     if (!comment.trim()) {
-      setError('Comment is required');
+      setError('Комментарий обязателен');
       return;
     }
 
@@ -124,8 +124,8 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
       }
 
       let authorName = '';
-      if (postAs === 'anonymous') authorName = 'Anonymous';
-      if (postAs === 'custom') authorName = name.trim() || 'Anonymous';
+      if (postAs === 'anonymous') authorName = 'Аноним';
+      if (postAs === 'custom') authorName = name.trim() || 'Аноним';
       // postAs === 'account' -> empty string, backend assigns current username
 
       if (isThread) {
@@ -142,7 +142,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
       setCaptcha(generateCaptcha());
       onSuccess();
     } catch (e: any) {
-      setError(e.message || 'Failed to post');
+      setError(e.message || 'Не удалось отправить сообщение');
     } finally {
       setSubmitting(false);
     }
@@ -151,13 +151,13 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
   return (
     <form onSubmit={handleSubmit} className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-2 text-xs shadow-sm">
       <div className="bg-[var(--color-accent)] text-white font-bold p-1 mb-2 flex justify-between items-center">
-        <span>{isThread ? 'New Thread' : 'Post a Reply'}</span>
+        <span>{isThread ? 'Новый тред' : 'Ответ в тред'}</span>
         {onCancel && <X size={14} className="cursor-pointer" onClick={onCancel} />}
       </div>
 
       <div className="flex flex-col gap-1">
         <div className="flex">
-          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Identity</label>
+          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Автор</label>
           <div className="flex-1 bg-white border border-[var(--color-border)] p-1 flex flex-wrap gap-3">
             {me && (
               <label className="inline-flex items-center gap-1">
@@ -167,7 +167,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                   checked={postAs === 'account'}
                   onChange={() => setPostAs('account')}
                 />
-                <span>Account ({me.displayName || me.email})</span>
+                <span>Аккаунт ({me.displayName || me.email})</span>
               </label>
             )}
             <label className="inline-flex items-center gap-1">
@@ -177,7 +177,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                 checked={postAs === 'anonymous'}
                 onChange={() => setPostAs('anonymous')}
               />
-              <span>Anonymous</span>
+              <span>Аноним</span>
             </label>
             <label className="inline-flex items-center gap-1">
               <input
@@ -186,19 +186,19 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                 checked={postAs === 'custom'}
                 onChange={() => setPostAs('custom')}
               />
-              <span>Custom name</span>
+              <span>Свое имя</span>
             </label>
           </div>
         </div>
 
         {postAs === 'custom' && (
           <div className="flex">
-            <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Name</label>
+            <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Имя</label>
             <input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
-              placeholder="Anonymous"
+              placeholder="Аноним"
               className="flex-1 bg-white border border-[var(--color-border)] p-1 outline-none"
             />
           </div>
@@ -206,7 +206,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
 
         {isThread && (
           <div className="flex">
-            <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Subject</label>
+            <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Тема</label>
             <input 
               type="text" 
               value={title} 
@@ -217,7 +217,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
         )}
 
         <div className="flex">
-          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Comment</label>
+          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Текст</label>
           <div className="flex-1">
             <textarea 
               value={comment} 
@@ -231,13 +231,13 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
               className="w-full bg-white border border-[var(--color-border)] p-1 h-24 outline-none resize-none"
             />
             <div className="text-[10px] text-[var(--color-muted)] mt-1">
-              Tip: press Ctrl+Enter to post.
+              Подсказка: нажмите Ctrl+Enter для отправки.
             </div>
           </div>
         </div>
 
         <div className="flex">
-          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">File</label>
+          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Файл</label>
           <input 
             type="file" 
             onChange={e => setFile(e.target.files ? e.target.files[0] : null)} 
@@ -247,7 +247,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Captcha</label>
+          <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Капча</label>
           <div
             className="bg-white border border-[var(--color-border)] p-1 px-1"
             onCopy={(e) => e.preventDefault()}
@@ -265,7 +265,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
             disabled={submitting}
             className="bg-[var(--color-accent)] text-white font-bold p-1 px-4 cursor-pointer hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
           >
-            {submitting ? '...' : 'Post'}
+            {submitting ? '...' : 'Отправить'}
           </button>
         </div>
 

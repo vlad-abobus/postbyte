@@ -34,19 +34,19 @@ export function ThreadPage() {
     fetchData();
   }, [boardId, threadId]);
 
-  if (loading) return <div className="p-4 font-mono">Loading thread...</div>;
-  if (!board || !thread) return <div className="p-4 font-mono text-red-600">Thread not found</div>;
+  if (loading) return <div className="p-4 font-mono">Загрузка треда...</div>;
+  if (!board || !thread) return <div className="p-4 font-mono text-red-600">Тред не найден</div>;
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-4 flex justify-between items-center bg-[var(--color-post-bg)] p-1 border border-[var(--color-border)]">
         <Link to={`/${boardId}`} className="post-link flex items-center gap-1">
           <ArrowLeft size={12} />
-          <span>Return to /{boardId}/</span>
+          <span>Назад в /{boardId}/</span>
         </Link>
         <button onClick={fetchData} className="post-link flex items-center gap-1">
           <RefreshCw size={12} />
-          <span>Update</span>
+          <span>Обновить</span>
         </button>
       </div>
 
@@ -72,7 +72,7 @@ export function ThreadPage() {
 
       {thread.isLocked ? (
         <div className="mt-8 p-4 bg-[var(--color-danger-bg)] border border-[var(--color-danger-border)] text-center font-bold">
-          This thread is locked. You cannot post a reply.
+          Этот тред закрыт. Новые ответы недоступны.
         </div>
       ) : (
         <div className="mt-12 flex justify-center">

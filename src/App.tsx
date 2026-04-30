@@ -32,9 +32,9 @@ export default function App() {
         <header className="sticky top-0 z-40 bg-[var(--color-post-bg)]/95 backdrop-blur-[1px] border-b border-[var(--color-border)] px-3 md:px-4 py-1 text-xs flex flex-col sm:flex-row justify-between sm:items-center gap-1">
           <div className="flex gap-3 md:gap-4 flex-wrap">
             <Link to="/" className="post-link font-bold">PostByteCL</Link>
-            <Link to="/" className="post-link">Boards</Link>
-            <Link to="/rules" className="post-link">Rules</Link>
-            <Link to="/about" className="post-link">About</Link>
+            <Link to="/" className="post-link">Доски</Link>
+            <Link to="/rules" className="post-link">Правила</Link>
+            <Link to="/about" className="post-link">О проекте</Link>
           </div>
           <div className="flex gap-3 md:gap-4 items-center flex-wrap">
             {user ? (
@@ -48,19 +48,19 @@ export default function App() {
                 {user.role === 'admin' && (
                   <Link to="/admin" className="post-link inline-flex items-center gap-1">
                     <Shield size={12} />
-                    Admin Panel
+                    Админ-панель
                   </Link>
                 )}
                 <button onClick={doLogout} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1">
                   <LogOut size={12} />
-                  Logout
+                  Выйти
                 </button>
               </>
             ) : (
               <>
                 <Link to="/login" className="post-link inline-flex items-center gap-1">
                   <LogIn size={12} />
-                  Login
+                  Войти
                 </Link>
               </>
             )}

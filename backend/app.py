@@ -817,7 +817,7 @@ def _ensure_default_boards() -> None:
         {
             "id": "help",
             "name": "Help",
-            "description": "Техпідтримка, поради по життю, питання та взаємодопомога.",
+            "description": "Срочная помощь по всем вопросам.",
             "category": "Boards",
         },
         {

@@ -13,13 +13,13 @@ export function SitePromoBox() {
   return (
     <div className="promo-box mb-4">
       <div className="promo-boxbar">
-        <h2>Miku lol</h2>
+        <h2>Выставочный режим</h2>
         <button
           type="button"
           className="promo-closebutton"
           onClick={close}
-          aria-label="Close promo"
-          title="Close"
+          aria-label="Закрыть блок"
+          title="Закрыть"
         >
           ×
         </button>
@@ -29,14 +29,14 @@ export function SitePromoBox() {
           <div className="promo-gif-wrap">
             <img
               src="/miku-vocaloid.gif"
-              alt="Miku promo"
+              alt="Выставочный баннер"
               className="promo-gif"
               onError={() => setImageHidden(true)}
               loading="lazy"
             />
           </div>
         ) : (
-          <p className="text-xs opacity-70">Miku promo is temporarily unavailable.</p>
+          <p className="text-xs opacity-70">Баннер временно недоступен.</p>
         )}
       </div>
     </div>

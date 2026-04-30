@@ -5,7 +5,7 @@ import { Board, Thread } from '../types';
 import { PostForm } from '../components/PostForm';
 import { PostItem } from '../components/PostItem';
 import { formatDate } from '../lib/utils';
-import { MessageSquare, Image as ImageIcon, Pin, Lock } from 'lucide-react';
+import { Pin, Lock } from 'lucide-react';
 
 export function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
@@ -28,8 +28,7 @@ export function BoardPage() {
   }, [boardId]);
 
   if (loading) return <div className="p-4 font-mono">Мы грузим подключение к серверу</div>;
-  if (!board) return <div className="p-4 font-mono text-red-600">Fuck you!</div>;
-  if (!board) return <div className="p-4 font-mono text-red-600">Board not found ! Fuck you !</div>;
+  if (!board) return <div className="p-4 font-mono text-red-600">Доска не найдена.</div>;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -44,7 +43,7 @@ export function BoardPage() {
             onClick={() => setShowForm(true)}
             className="text-[var(--color-link)] underline font-bold cursor-pointer hover:text-[var(--color-link-hover)]"
           >
-            [Start a New Thread]
+            [Создать новый тред]
           </button>
         ) : (
           <div className="w-full max-w-lg">
@@ -64,7 +63,7 @@ export function BoardPage() {
 
       <div className="border-t border-[var(--color-border)] pt-4">
         {threads.length === 0 ? (
-          <div className="text-center py-10 opacity-50">There are no threads yet. Be the first !</div>
+          <div className="text-center py-10 opacity-50">Пока нет тредов. Будьте первым.</div>
         ) : (
           <div className="flex flex-col gap-8">
             {threads.map(thread => (
@@ -93,10 +92,10 @@ function ThreadPreview({ thread, boardId }: { thread: Thread, boardId: string })
       </div>
       <div className="mt-2 text-xs opacity-70 ml-2">
         <Link to={`/${boardId}/thread/${thread.id}`} className="post-link font-bold">
-          [Full thread]
+          [Открыть тред]
         </Link>
         <span className="mx-2">
-          {thread.replyCount} replies and {thread.imageCount} images omitted.
+          Скрыто: {thread.replyCount} ответов и {thread.imageCount} изображений.
         </span>
         {thread.isPinned && <Pin size={10} className="inline mr-1 text-[var(--color-post-header)]" />}
         {thread.isLocked && <Lock size={10} className="inline mr-1 text-[var(--color-post-header)]" />}

@@ -34,7 +34,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
   }, [showImageModal]);
 
   const handleDelete = async () => {
-    if (window.confirm('Delete this post?') && boardId && threadId) {
+    if (window.confirm('Удалить этот пост?') && boardId && threadId) {
       setDeleting(true);
       try {
         await forumService.deletePost(boardId, threadId, post.id);
@@ -46,12 +46,12 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
   };
 
   const handleReport = async () => {
-    const reason = window.prompt('Why are you reporting this post?');
+    const reason = window.prompt('Почему вы жалуетесь на этот пост?');
     if (reason && boardId && threadId) {
       setReporting(true);
       await forumService.reportPost(boardId, threadId, post.id, reason);
       setReporting(false);
-      alert('Report submitted.');
+      alert('Жалоба отправлена.');
     }
   };
 
@@ -75,12 +75,12 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
         <div className={`flex items-center gap-2 text-xs flex-wrap ${isOp ? 'op-header' : ''}`}>
           {post.authorUid ? (
             <Link to={`/profile/${post.authorUid}`} className="font-bold text-[var(--color-post-header)] inline-flex items-center gap-1 hover:underline">
-              {post.authorName || 'Anonymous'}
+              {post.authorName || 'Аноним'}
               {isStaff && <Shield size={10} className="text-[var(--color-post-header)]" />}
             </Link>
           ) : (
             <span className="font-bold text-[var(--color-post-header)] inline-flex items-center gap-1">
-              {post.authorName || 'Anonymous'}
+              {post.authorName || 'Аноним'}
               {isStaff && <Shield size={10} className="text-[var(--color-post-header)]" />}
             </span>
           )}
@@ -99,7 +99,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
             <>
               <button onClick={handleQuote} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer">
                 <MessageSquare size={10} />
-                Quote
+                Цитата
               </button>
               <button 
                 onClick={handleReport} 
@@ -107,7 +107,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
                 className="post-link text-orange-700 bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
               >
                 <Flag size={10} />
-                Report
+                Жалоба
               </button>
               {canDelete && (
                 <button
@@ -115,7 +115,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
                   disabled={deleting}
                   className="post-link text-red-700 bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
                 >
-                  Delete now
+                  Удалить
                 </button>
               )}
             </>
@@ -127,7 +127,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
           {post.image?.url && (
             <div className="flex-shrink-0">
               <div className="text-[10px] text-[var(--color-muted)] mb-1 italic">
-                File: {post.image.filename} ({Math.round(post.image.size / 1024)} KB)
+                Файл: {post.image.filename} ({Math.round(post.image.size / 1024)} KB)
               </div>
               <button
                 type="button"
@@ -142,7 +142,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
                 />
               </button>
               <a href={post.image.url} target="_blank" rel="noreferrer" className="post-link text-[10px] mt-1 inline-block">
-                Original
+                Оригинал
               </a>
             </div>
           )}
@@ -192,10 +192,10 @@ function ImageModal({
           <span className="font-bold truncate">{filename}</span>
           <div className="flex items-center gap-3">
             <a href={imageUrl} target="_blank" rel="noreferrer" className="post-link">
-              Original
+              Оригинал
             </a>
             <button type="button" className="post-link bg-transparent border-none p-0" onClick={onClose}>
-              Close
+              Закрыть
             </button>
           </div>
         </div>

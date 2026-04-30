@@ -7,7 +7,7 @@ export function About() {
 
       <div className="space-y-6 text-sm leading-relaxed">
         <p>
-          <strong>PostByteCL</strong> - это community-форум в стиле imageboard, где важны живое общение, полезные советы
+          <strong>PostByteCL</strong> - это форум-сообщество в стиле имиджборда, где важны живое общение, полезные советы
           и свободные обсуждения без лишнего шума.
         </p>
 
@@ -28,7 +28,7 @@ export function About() {
         <section className="border border-[var(--color-border)] p-4 bg-white/40">
           <h2 className="font-bold text-[var(--color-post-header)] mb-2">Технологический стек</h2>
           <p>
-            Frontend: React + Tailwind CSS. Backend: Flask + SQLAlchemy. База: PostgreSQL. Для хранения файлов и деплоя
+            Фронтенд: React + Tailwind CSS. Бэкенд: Flask + SQLAlchemy. База: PostgreSQL. Для хранения файлов и деплоя
             используются Cloudinary и Render.
           </p>
         </section>
@@ -36,9 +36,8 @@ export function About() {
         <section className="border border-[var(--color-border)] p-4 bg-white/40">
           <h2 className="font-bold text-[var(--color-post-header)] mb-2">Команда</h2>
           <ul className="list-disc ml-5 space-y-1">
-            <li>Wirnty - backend и core-логика.</li>
+            <li>VladislavMorgan - программист и разработчик.</li>
             <li>Lucky_13 - UI/UX и визуальный стиль.</li>
-            <li>VladislavMorgan - развитие проекта и комьюнити-направление.</li>
           </ul>
         </section>
       </div>

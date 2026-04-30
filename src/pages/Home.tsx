@@ -16,7 +16,7 @@ export function Home() {
         const b = await forumService.getBoards();
         setBoards(b);
       } catch (e: any) {
-        setError(e?.message || 'Failed to load boards');
+        setError(e?.message || 'Не удалось загрузить доски');
       } finally {
         setLoading(false);
       }
@@ -33,7 +33,7 @@ export function Home() {
     <div className="max-w-4xl mx-auto">
       <div className="board-banner">
         <h1 className="board-title">PostByteCL</h1>
-        <p className="text-xs text-[var(--color-post-header)] opacity-80">Anonymous Imageboard</p>
+        <p className="text-xs text-[var(--color-post-header)] opacity-80">Русскоязычный имиджборд с уютной атмосферой</p>
       </div>
       <div className="w-fit mx-auto mb-6">
         <SitePromoBox />
@@ -41,7 +41,7 @@ export function Home() {
 
       <div className="flex flex-col gap-6">
         {categories.map(cat => (
-          <div key={cat} className="border border-[var(--color-border)] bg-[var(--color-post-bg)]">
+          <div key={cat} className="border border-[var(--color-border)] bg-[var(--color-post-bg)] shadow-sm rounded-sm overflow-hidden">
             <div className="bg-[var(--color-accent)] text-white font-bold p-1 text-sm">{cat}</div>
             <div className="p-2 flex flex-wrap gap-x-8 gap-y-2">
               {boards.filter(b => b.category === cat).map(board => (
@@ -57,11 +57,11 @@ export function Home() {
         ))}
       </div>
 
-      <div className="mt-12 border border-[var(--color-border)] bg-[var(--color-post-bg)] p-4 text-center">
-        <h2 className="font-bold mb-2">Statistics</h2>
+      <div className="mt-12 border border-[var(--color-border)] bg-[var(--color-post-bg)] p-4 text-center shadow-sm">
+        <h2 className="font-bold mb-2">Статистика</h2>
         <div className="flex justify-center gap-8 text-xs">
-          <div>Total Boards: {boards.length}</div>
-          <div>Active Users: Anonymous</div>
+          <div>Всего досок: {boards.length}</div>
+          <div>Формат общения: анонимно и по делу</div>
         </div>
       </div>
     </div>

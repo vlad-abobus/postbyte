@@ -35,7 +35,7 @@ export function AdminPage() {
       try {
         await loadAll();
       } catch (e: any) {
-        setError(e?.message || 'Failed to load admin panel');
+        setError(e?.message || 'Не удалось загрузить админ-панель');
       } finally {
         setLoading(false);
       }
@@ -50,7 +50,7 @@ export function AdminPage() {
       await forumService.adminSetUserRole(uid, role);
       await loadAll();
     } catch (e: any) {
-      setError(e?.message || 'Failed to change role');
+      setError(e?.message || 'Не удалось изменить роль');
     } finally {
       setSaving(false);
     }
@@ -69,7 +69,7 @@ export function AdminPage() {
       setForm((prev) => ({ ...prev, ip: '', reason: '', durationHours: '' }));
       await loadAll();
     } catch (e: any) {
-      setError(e?.message || 'Failed to create action');
+      setError(e?.message || 'Не удалось применить действие');
     } finally {
       setSaving(false);
     }
@@ -82,7 +82,7 @@ export function AdminPage() {
       await forumService.adminDisableIpAction(action.type, action.id);
       await loadAll();
     } catch (e: any) {
-      setError(e?.message || 'Failed to disable action');
+      setError(e?.message || 'Не удалось отключить действие');
     } finally {
       setSaving(false);
     }
@@ -96,40 +96,40 @@ export function AdminPage() {
       setClearIp('');
       await loadAll();
     } catch (e: any) {
-      setError(e?.message || 'Failed to clear IP actions');
+      setError(e?.message || 'Не удалось очистить IP-действия');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-4 font-mono">Loading admin panel...</div>;
+  if (loading) return <div className="p-4 font-mono">Загрузка админ-панели...</div>;
   if (!isAdmin) return <Navigate to="/" replace />;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
-        <h1 className="font-bold text-lg">Admin Panel</h1>
-        <p className="text-xs opacity-70">Account management, role changes, IP mutes and bans.</p>
+        <h1 className="font-bold text-lg">Админ-панель</h1>
+        <p className="text-xs opacity-70">Управление аккаунтами, ролями, IP-мутами и банами.</p>
       </div>
 
       {error && <div className="p-2 text-xs border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)]">{error}</div>}
 
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
-        <h2 className="font-bold mb-2">Users</h2>
+        <h2 className="font-bold mb-2">Пользователи</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[var(--color-border)]">
-                <th className="text-left py-1">Name</th>
+                <th className="text-left py-1">Имя</th>
                 <th className="text-left py-1">Email</th>
-                <th className="text-left py-1">Role</th>
-                <th className="text-left py-1">Joined</th>
+                <th className="text-left py-1">Роль</th>
+                <th className="text-left py-1">Дата регистрации</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
                 <tr key={u.uid} className="border-b border-[var(--color-border)]/50">
-                  <td className="py-1">{u.displayName || '(no name)'}</td>
+                  <td className="py-1">{u.displayName || '(без имени)'}</td>
                   <td className="py-1">{u.email || '-'}</td>
                   <td className="py-1">
                     <select
@@ -152,37 +152,37 @@ export function AdminPage() {
       </div>
 
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
-        <h2 className="font-bold mb-2">IP Mute / Ban</h2>
+        <h2 className="font-bold mb-2">IP-мут / бан</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <select
             className="border border-[var(--color-border)] p-1 text-xs"
             value={form.type}
             onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as 'ban' | 'mute' }))}
           >
-            <option value="ban">ban</option>
-            <option value="mute">mute</option>
+            <option value="ban">бан</option>
+            <option value="mute">мут</option>
           </select>
           <input
             className="border border-[var(--color-border)] p-1 text-xs"
             value={form.ip}
             onChange={(e) => setForm((prev) => ({ ...prev, ip: e.target.value }))}
-            placeholder="IP address"
+            placeholder="IP-адрес"
           />
           <input
             className="border border-[var(--color-border)] p-1 text-xs"
             value={form.durationHours}
             onChange={(e) => setForm((prev) => ({ ...prev, durationHours: e.target.value }))}
-            placeholder="Duration hours (blank = forever)"
+            placeholder="Длительность в часах (пусто = навсегда)"
           />
           <button className="post-link text-left" disabled={saving || !form.ip.trim()} onClick={createAction}>
-            Add action
+            Добавить
           </button>
         </div>
         <textarea
           className="mt-2 w-full border border-[var(--color-border)] p-1 text-xs h-16"
           value={form.reason}
           onChange={(e) => setForm((prev) => ({ ...prev, reason: e.target.value }))}
-          placeholder="Reason"
+          placeholder="Причина"
         />
         <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
           <select
@@ -190,18 +190,18 @@ export function AdminPage() {
             value={clearType}
             onChange={(e) => setClearType(e.target.value as 'all' | 'ban' | 'mute')}
           >
-            <option value="all">unban + unmute</option>
-            <option value="ban">only unban</option>
-            <option value="mute">only unmute</option>
+            <option value="all">снять бан + мут</option>
+            <option value="ban">только снять бан</option>
+            <option value="mute">только снять мут</option>
           </select>
           <input
             className="border border-[var(--color-border)] p-1 text-xs md:col-span-2"
             value={clearIp}
             onChange={(e) => setClearIp(e.target.value)}
-            placeholder="IP for instant clear"
+            placeholder="IP для мгновенной очистки"
           />
           <button className="post-link text-left" disabled={saving || !clearIp.trim()} onClick={clearByIp}>
-            Clear by IP
+            Очистить по IP
           </button>
         </div>
 
@@ -211,12 +211,12 @@ export function AdminPage() {
               <span className="font-bold uppercase">{a.type}</span>
               <span>{a.ip}</span>
               <span className="opacity-70">{a.reason || '-'}</span>
-              <span className="opacity-70">Created: {formatDate(a.createdAt)}</span>
-              <span className="opacity-70">Expires: {a.expiresAt ? formatDate(a.expiresAt) : 'never'}</span>
-              <span className={`font-bold ${a.active ? 'text-[var(--color-post-header)]' : 'opacity-60'}`}>{a.active ? 'active' : 'inactive'}</span>
+              <span className="opacity-70">Создано: {formatDate(a.createdAt)}</span>
+              <span className="opacity-70">До: {a.expiresAt ? formatDate(a.expiresAt) : 'без срока'}</span>
+              <span className={`font-bold ${a.active ? 'text-[var(--color-post-header)]' : 'opacity-60'}`}>{a.active ? 'активно' : 'неактивно'}</span>
               {a.active && (
                 <button className="post-link md:ml-auto" disabled={saving} onClick={() => disableAction(a)}>
-                  Disable
+                  Отключить
                 </button>
               )}
             </div>

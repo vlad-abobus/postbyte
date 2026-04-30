@@ -53,26 +53,26 @@ export function ProfilePage() {
       setMe(updated);
       setIsEditing(false);
     } catch (e: any) {
-      setSaveError(e?.message || 'Failed to save profile');
+      setSaveError(e?.message || 'Не удалось сохранить профиль');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-4 font-mono">Loading profile...</div>;
-  if (!profile) return <div className="p-4 font-mono text-red-600">User not found</div>;
+  if (loading) return <div className="p-4 font-mono">Загрузка профиля...</div>;
+  if (!profile) return <div className="p-4 font-mono text-red-600">Пользователь не найден</div>;
 
   return (
     <div className="max-w-4xl mx-auto">
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] shadow-sm">
         <div className="bg-[var(--color-accent)] text-white p-2 font-bold flex justify-between items-center">
-          <span>User Profile: {profile.displayName}</span>
+          <span>Профиль пользователя: {profile.displayName}</span>
           {isOwnProfile && (
             <button
               onClick={() => setIsEditing(s => !s)}
               className="bg-white text-[var(--color-accent)] px-2 py-0.5 rounded text-[10px] uppercase"
             >
-              {isEditing ? 'Close' : 'Edit'}
+              {isEditing ? 'Закрыть' : 'Редактировать'}
             </button>
           )}
         </div>
@@ -82,7 +82,7 @@ export function ProfilePage() {
           <div className="flex flex-col items-center gap-4">
             <div className="relative group w-32 h-32 bg-white border border-[var(--color-border)] overflow-hidden flex items-center justify-center">
               {profile.photoURL ? (
-                <img src={profile.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                <img src={profile.photoURL} alt="Аватар" className="w-full h-full object-cover" />
               ) : (
                 <UserIcon size={64} className="text-[var(--color-border)]" />
               )}
@@ -90,7 +90,7 @@ export function ProfilePage() {
               {isOwnProfile && (
                 <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer p-2 text-center">
                   <Camera size={24} />
-                  <span className="text-[10px] font-bold uppercase mt-1">Change Avatar</span>
+                  <span className="text-[10px] font-bold uppercase mt-1">Сменить аватар</span>
                   <input 
                     type="file" 
                     className="hidden" 
@@ -107,7 +107,7 @@ export function ProfilePage() {
                             photoURL: updated.photoURL || '',
                           }));
                         } catch (err) {
-                          alert("Failed to upload image");
+                          alert("Не удалось загрузить изображение");
                         }
                       }
                     }}
@@ -122,7 +122,7 @@ export function ProfilePage() {
             )}
             {profile.role === 'user' && (
               <div className="bg-[var(--color-border)] text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">
-                user
+                пользователь
               </div>
             )}
           </div>
@@ -132,17 +132,17 @@ export function ProfilePage() {
             {isEditing ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase mb-1">Display Name</label>
+                  <label className="block text-[10px] font-bold uppercase mb-1">Отображаемое имя</label>
                   <input
                     type="text"
                     value={editData.displayName}
                     onChange={e => setEditData({ ...editData, displayName: e.target.value })}
                     className="w-full border border-[var(--color-border)] p-1 text-xs"
-                    placeholder="3-32 chars, spaces allowed"
+                    placeholder="3-32 символа, пробелы разрешены"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase mb-1">Avatar URL</label>
+                  <label className="block text-[10px] font-bold uppercase mb-1">Ссылка на аватар</label>
                   <input 
                     type="text" 
                     value={editData.photoURL} 
@@ -152,7 +152,7 @@ export function ProfilePage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase mb-1">Biography</label>
+                  <label className="block text-[10px] font-bold uppercase mb-1">О себе</label>
                   <textarea 
                     value={editData.bio} 
                     onChange={e => setEditData({ ...editData, bio: e.target.value })}
@@ -165,7 +165,7 @@ export function ProfilePage() {
                     disabled={saving}
                     className="bg-[var(--color-accent)] text-white px-4 py-1 text-[10px] font-bold uppercase flex items-center gap-1 disabled:opacity-60"
                   >
-                    <Save size={12} /> {saving ? 'Saving...' : 'Save'}
+                    <Save size={12} /> {saving ? 'Сохраняем...' : 'Сохранить'}
                   </button>
                 </div>
                 {saveError && (
@@ -176,11 +176,11 @@ export function ProfilePage() {
               <div className="space-y-4">
                 <div>
                   <h2 className="text-xl font-bold text-[var(--color-post-header)]">{profile.displayName}</h2>
-                  <p className="text-[10px] text-[var(--color-muted)]">Member since: {formatDate(profile.createdAt)}</p>
+                  <p className="text-[10px] text-[var(--color-muted)]">На сайте с: {formatDate(profile.createdAt)}</p>
                 </div>
                 <div>
-                  <h3 className="text-[10px] font-bold uppercase text-[var(--color-post-header)]">Bio</h3>
-                  <p className="text-xs whitespace-pre-wrap">{profile.bio || "No bio set."}</p>
+                  <h3 className="text-[10px] font-bold uppercase text-[var(--color-post-header)]">О себе</h3>
+                  <p className="text-xs whitespace-pre-wrap">{profile.bio || "Описание пока не добавлено."}</p>
                 </div>
               </div>
             )}
@@ -190,9 +190,9 @@ export function ProfilePage() {
 
       {/* Post History */}
       <div className="mt-8">
-        <h3 className="font-bold border-b border-[var(--color-border)] mb-4 pb-1">Activity History</h3>
+        <h3 className="font-bold border-b border-[var(--color-border)] mb-4 pb-1">История активности</h3>
         {posts.length === 0 ? (
-          <p className="text-xs italic opacity-50">No posts yet.</p>
+          <p className="text-xs italic opacity-50">Пока нет постов.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {posts.map(p => (

@@ -1,11 +1,8 @@
 # PostByteCL
 
+<h1>PostByteCL </h1>
 <p align="center">
-  <img src="./public/miku-vocaloid.gif" alt="PostByteCL preview" width="100%" />
-</p>
-
-<p align="center">
-  Анонимная имиджборда с вайбом классических imageboard и современным веб-стеком
+  Неплохой форум с досками у стиле "старого интернета "
 </p>
 
 <p align="center">

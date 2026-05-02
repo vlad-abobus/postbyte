@@ -1,6 +1,5 @@
 # PostByteCL
 
-<h1>PostByteCL </h1>
 <p align="center">
   Неплохой форум с досками у стиле "старого интернета "
 </p>

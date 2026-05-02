@@ -33,7 +33,7 @@ export function Home() {
     <div className="max-w-4xl mx-auto">
       <div className="board-banner">
         <h1 className="board-title">PostByteCL</h1>
-        <p className="text-xs text-[var(--color-post-header)] opacity-80">Русскоязычный имиджборд с уютной атмосферой</p>
+        <p className="text-xs text-[var(--color-post-header)] opacity-80">Неплохой форум с досками у стиле "старого интернета "і</p>
       </div>
       <div className="w-fit mx-auto mb-6">
         <SitePromoBox />

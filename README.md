@@ -44,7 +44,7 @@
 - **Frontend:** `React 19` + `TypeScript` + `Vite` + `TailwindCSS`
 - **Backend:** `Flask` + `SQLAlchemy`
 - **Data Layer:** `PostgreSQL`
-- **Media:** локальные uploads / опционально Cloudinary
+- **Media:** Cloudinary
 - **Deployment:** Render Blueprint (`web + api`)
 
 ## Ключевые возможности
@@ -67,6 +67,3 @@
 
 - Live: [https://postbyte-2.onrender.com/](https://postbyte-2.onrender.com/)
 
-## Статус
-
-Проект в активном развитии: планируются улучшения модерации, производительности и UX.

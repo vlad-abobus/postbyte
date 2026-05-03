@@ -2,7 +2,7 @@ export function Rules() {
   return (
     <div className="max-w-4xl mx-auto bg-[var(--color-post-bg)] border border-[var(--color-border)] p-6 md:p-8 shadow-sm">
       <h1 className="text-2xl font-bold text-[var(--color-post-header)] border-b border-[var(--color-border)] mb-3 pb-2">
-        Правила PostByteCL
+        Правила AnyWhere
       </h1>
       <p className="text-sm opacity-80 mb-6">
         Пространство для нормального общения. Здесь можно обсуждать технику, жизненные вопросы, учебу, быт и все,

@@ -31,7 +31,7 @@ export default function App() {
         {/* Navigation Bar */}
         <header className="sticky top-0 z-40 bg-[var(--color-post-bg)]/95 backdrop-blur-[1px] border-b border-[var(--color-border)] px-3 md:px-4 py-1 text-xs flex flex-col sm:flex-row justify-between sm:items-center gap-1">
           <div className="flex gap-3 md:gap-4 flex-wrap">
-            <Link to="/" className="post-link font-bold">PostByteCL</Link>
+            <Link to="/" className="post-link font-bold">AnyWhere</Link>
             <Link to="/" className="post-link">Доски</Link>
             <Link to="/rules" className="post-link">Правила</Link>
             <Link to="/about" className="post-link">О проекте</Link>
@@ -86,7 +86,7 @@ export default function App() {
         </main>
 
         <footer className="text-center py-8 text-[10px] text-[var(--color-muted)] border-top border-[var(--color-border)] mt-8">
-          <p>Это PostByte</p>
+          <p>Это AnyWhere</p>
           <p>2026</p>
         </footer>
       </div>

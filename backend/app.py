@@ -105,10 +105,12 @@ def create_app() -> Flask:
 
     db.init_app(app)
 
-    with app.app_context():
-        db.create_all()
-        _ensure_default_boards()
-        _run_schema_migrations_if_needed()
+    # NOTE: database schema creation and runtime migrations were previously run
+    # automatically during app startup here. That made deployments fragile when
+    # the database DNS/connection was temporarily unavailable (the process
+    # crashed on import). Initialization is now moved to a separate CLI command
+    # (`flask init-db`) which performs retries and should be invoked from the
+    # start script before launching gunicorn.
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):
@@ -952,5 +954,6 @@ def _enforce_ip_restrictions(ip: str | None, *, for_posting: bool) -> None:
             abort(403, description="Your IP is muted")
 
 
+# Create the module-level `app` so existing imports (e.g. gunicorn entrypoint)
+# keep working. The call to create_app() no longer performs schema creation.
 app = create_app()
-

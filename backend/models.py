@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from .db import db
+if __package__:
+    from .db import db
+else:
+    from db import db
 
 
 def utcnow() -> datetime:

@@ -24,8 +24,14 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from .db import db
-from .models import Board, IpBan, IpMute, Post, Report, Thread, User
+if __package__:
+    # Package import (local dev, gunicorn backend.app:app, Render).
+    from .db import db
+    from .models import Board, IpBan, IpMute, Post, Report, Thread, User
+else:
+    # Top-level import (Vercel entrypoint app:app with root=backend/).
+    from db import db
+    from models import Board, IpBan, IpMute, Post, Report, Thread, User
 
 
 def create_app() -> Flask:

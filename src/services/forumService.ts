@@ -1,8 +1,8 @@
 import { Board, IpAction, Post, Report, Thread, User } from '../types';
 
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.toString().trim().replace(/\/+$/, '') ||
-  'http://localhost:5000';
+  (import.meta as any).env?.VITE_API_BASE?.toString().trim().replace(/\/+$/, '') ??
+  ((import.meta as any).env?.DEV ? 'http://localhost:5000' : '');
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});

@@ -39,11 +39,22 @@ def create_app() -> Flask:
 
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
-    app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", secrets.token_hex(32))
+    max_upload_bytes = 5 * 1024 * 1024
+    max_upload_bytes_raw = os.getenv("MAX_UPLOAD_BYTES")
+    if max_upload_bytes_raw:
+        try:
+            max_upload_bytes = int(max_upload_bytes_raw)
+        except ValueError:
+            app.logger.warning(
+                "Invalid MAX_UPLOAD_BYTES=%r; using %s bytes",
+                max_upload_bytes_raw,
+                max_upload_bytes,
+            )
+    app.config["MAX_CONTENT_LENGTH"] = max_upload_bytes
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or secrets.token_hex(32)
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
-    database_url = (os.getenv("DATABASE_URL") or "").strip()
+    database_url = (os.getenv("DATABASE_URL") or "").strip().strip('"').strip("'")
     if not database_url:
         database_url = "postgresql+psycopg://postgres:postgres@localhost:5432/postbytecl"
     elif database_url.startswith("postgres://"):
@@ -52,14 +63,22 @@ def create_app() -> Flask:
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-    uploads_dir_raw = os.getenv("UPLOADS_DIR", "uploads")
+    # Vercel's filesystem is read-only except /tmp. Default there so startup
+    # doesn't crash if UPLOADS_DIR is not configured. Cloudinary is still
+    # required for durable uploads.
+    default_uploads_dir = "/tmp/uploads" if os.getenv("VERCEL") else "uploads"
+    uploads_dir_raw = os.getenv("UPLOADS_DIR") or default_uploads_dir
     uploads_dir = Path(uploads_dir_raw).resolve()
     try:
         uploads_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
         # On some hosts (e.g. misconfigured Render service without a mounted disk),
         # absolute paths like /var/data may be unavailable. Fallback to local uploads.
-        fallback_uploads_dir = (Path(__file__).resolve().parent.parent / "uploads").resolve()
+        fallback_uploads_dir = (
+            Path("/tmp/uploads")
+            if os.getenv("VERCEL")
+            else (Path(__file__).resolve().parent.parent / "uploads").resolve()
+        )
         fallback_uploads_dir.mkdir(parents=True, exist_ok=True)
         uploads_dir = fallback_uploads_dir
     app.config["UPLOADS_DIR"] = str(uploads_dir)
@@ -79,6 +98,18 @@ def create_app() -> Flask:
 
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     parsed_cors_origins = [o.strip() for o in cors_origins if o.strip()]
+
+    print(
+        "[postbyte] startup: "
+        f"vercel={bool(os.getenv('VERCEL'))} "
+        f"database_url={'set' if os.getenv('DATABASE_URL') else 'missing'} "
+        f"secret_key={'set' if os.getenv('SECRET_KEY') else 'missing'} "
+        f"max_upload_bytes={app.config['MAX_CONTENT_LENGTH']} "
+        f"uploads_dir={app.config['UPLOADS_DIR']} "
+        f"cloudinary={'on' if app.config['CLOUDINARY_ENABLED'] else 'off'} "
+        f"cors_origins={parsed_cors_origins}",
+        flush=True,
+    )
 
     # Captcha/session auth relies on browser cookies. For cross-origin frontend/api
     # deployments (e.g. separate Render domains), SameSite=None + Secure is required.
@@ -112,9 +143,15 @@ def create_app() -> Flask:
     db.init_app(app)
 
     with app.app_context():
-        db.create_all()
-        _ensure_default_boards()
-        _run_schema_migrations_if_needed()
+        try:
+            db.create_all()
+            _ensure_default_boards()
+            _run_schema_migrations_if_needed()
+        except Exception:
+            app.logger.exception(
+                "Database initialization failed. Check DATABASE_URL, Neon connectivity, and SSL settings."
+            )
+            raise
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):

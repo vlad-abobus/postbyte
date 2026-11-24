@@ -129,6 +129,7 @@ UPDATE users SET role = 'admin' WHERE username = 'твой_username';
 | `ModuleNotFoundError: flask` | Сервис `api` должен иметь `root: "backend/"` и `backend/requirements.txt` |
 | `ModuleNotFoundError: backend` | При `root: "backend/"` entrypoint — `app:app` |
 | 413 при загрузке | Уменьшить `MAX_UPLOAD_BYTES`, сжать картинку |
+| `FUNCTION_INVOCATION_FAILED` | Смотреть Runtime Logs; чаще всего нет `DATABASE_URL`, не задан `UPLOADS_DIR` или неверный `MAX_UPLOAD_BYTES` |
 | Картинки исчезают | Настроить Cloudinary |
 | Капча/логин не работают | Проверить `SECRET_KEY`, cookie, same-origin |
 | CORS | Добавить точный origin в `CORS_ORIGINS`, redeploy |
@@ -142,3 +143,36 @@ UPDATE users SET role = 'admin' WHERE username = 'твой_username';
 - Функция не должна рассчитывать на фоновые процессы.
 - `db.create_all()` выполняется при холодном старте, поэтому база должна быть доступна до первого запроса.
 - Vercel Services — Beta. Если нужна максимально консервативная схема, можно разнести frontend и backend на два проекта, но тогда cookie лучше держать same-origin через прокси или кастомные поддомены.
+
+## 9. Переменные Neon
+
+`DATABASE_URL` и `DATABASE_URL_UNPOOLED` бери в Neon Console → Connection Details.
+Не коммить строки подключения и пароли в репозиторий — добавляй их только в Vercel Environment Variables.
+
+## 10. Если функция падает с `FUNCTION_INVOCATION_FAILED`
+
+Это не ошибка сборки, а падение Python-функции при старте. Нужен traceback:
+
+1. Vercel → проект → **Deployments** → последний deployment → **Logs** → **Runtime Logs**.
+2. Ищи строку `[postbyte] startup:` — в ней видно, какие переменные дошли до функции.
+3. Если в логах есть `Database initialization failed`, смотри текст исключения ниже.
+4. Через CLI:
+
+```bash
+npm i -g vercel@latest
+vercel link
+vercel logs <deployment-url>
+```
+
+Что означает ошибка:
+
+| В логах | Причина |
+|---|---|
+| `database_url=missing` | `DATABASE_URL` не добавлен для **Production** |
+| `OperationalError` / `could not connect` | неверный Neon URL, пароль, SSL или база недоступна |
+| `Read-only file system` | не задан `UPLOADS_DIR=/tmp/uploads` |
+| `Invalid MAX_UPLOAD_BYTES` | значение должно быть целым числом, например `4000000` |
+| `ModuleNotFoundError` | зависимости не установились: проверь `backend/requirements.txt` и `root: "backend/"` |
+| `attempted relative import` | задеплоен старый коммит без патча импортов |
+
+После изменения Environment Variables сделай **новый deployment**. Обновление старого deployment переменные не подхватывает.

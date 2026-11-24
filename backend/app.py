@@ -8,6 +8,7 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from sqlalchemy import inspect
 
@@ -17,7 +18,7 @@ try:
 except Exception:
     cloudinary = None
 from dotenv import load_dotenv
-from flask import Flask, abort, current_app, jsonify, request, send_from_directory, session
+from flask import Flask, Response, abort, current_app, jsonify, request, send_from_directory, session
 from flask_cors import CORS
 from PIL import Image
 from werkzeug.exceptions import HTTPException
@@ -27,11 +28,11 @@ from werkzeug.utils import secure_filename
 if __package__:
     # Package import (local dev, gunicorn backend.app:app, Render).
     from .db import db
-    from .models import Board, IpBan, IpMute, Post, Report, Thread, User
+    from .models import Board, ImageBlob, IpBan, IpMute, Post, Report, Thread, User
 else:
     # Top-level import (Vercel entrypoint app:app with root=backend/).
     from db import db
-    from models import Board, IpBan, IpMute, Post, Report, Thread, User
+    from models import Board, ImageBlob, IpBan, IpMute, Post, Report, Thread, User
 
 
 def create_app() -> Flask:
@@ -64,8 +65,9 @@ def create_app() -> Flask:
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     # Vercel's filesystem is read-only except /tmp. Default there so startup
-    # doesn't crash if UPLOADS_DIR is not configured. Cloudinary is still
-    # required for durable uploads.
+    # doesn't crash if UPLOADS_DIR is not configured. Uploads are persisted in
+    # PostgreSQL (or Cloudinary when configured), so /tmp is only a legacy
+    # fallback for files written by older deployments.
     default_uploads_dir = "/tmp/uploads" if os.getenv("VERCEL") else "uploads"
     uploads_dir_raw = os.getenv("UPLOADS_DIR") or default_uploads_dir
     uploads_dir = Path(uploads_dir_raw).resolve()
@@ -107,6 +109,7 @@ def create_app() -> Flask:
         f"max_upload_bytes={app.config['MAX_CONTENT_LENGTH']} "
         f"uploads_dir={app.config['UPLOADS_DIR']} "
         f"cloudinary={'on' if app.config['CLOUDINARY_ENABLED'] else 'off'} "
+        f"image_storage={'cloudinary' if app.config['CLOUDINARY_ENABLED'] else 'database'} "
         f"cors_origins={parsed_cors_origins}",
         flush=True,
     )
@@ -679,15 +682,19 @@ def create_app() -> Flask:
             abort(403, description="You can delete only your own posts")
 
         if p.is_op:
+            image_urls = [post.image_url for post in t.posts]
             db.session.delete(t)
             db.session.commit()
+            _cleanup_image_blobs(image_urls)
             return jsonify({"ok": True})
 
+        deleted_image_url = p.image_url
         db.session.delete(p)
         t.reply_count = max(0, t.reply_count - 1)
         if p.image_url:
             t.image_count = max(0, t.image_count - 1)
         db.session.commit()
+        _cleanup_image_blobs([deleted_image_url])
         return jsonify({"ok": True})
 
     @app.post("/api/uploads")
@@ -696,6 +703,15 @@ def create_app() -> Flask:
 
     @app.get("/uploads/<path:filename>")
     def serve_upload(filename: str):
+        blob = ImageBlob.query.filter_by(filename=filename).first()
+        if blob:
+            data = bytes(blob.data)
+            response = Response(data, mimetype=blob.content_type or "application/octet-stream")
+            response.headers["Content-Length"] = str(len(data))
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
+        # Legacy/local files that still exist on disk (Render disk, local dev).
         return send_from_directory(app.config["UPLOADS_DIR"], filename)
 
     return app
@@ -780,6 +796,54 @@ def _run_schema_migrations_if_needed() -> None:
                 conn.exec_driver_sql("DELETE FROM boards WHERE id='nfsw'")
 
 
+_IMAGE_CONTENT_TYPES = {
+    "PNG": "image/png",
+    "JPEG": "image/jpeg",
+    "GIF": "image/gif",
+    "WEBP": "image/webp",
+}
+_IMAGE_EXTENSIONS = {
+    "PNG": ".png",
+    "JPEG": ".jpg",
+    "GIF": ".gif",
+    "WEBP": ".webp",
+}
+
+
+def _upload_filename_from_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    path = urlparse(str(url)).path
+    prefix = "/uploads/"
+    if not path.startswith(prefix):
+        return None
+    filename = path[len(prefix) :]
+    if not filename or "/" in filename:
+        return None
+    return filename
+
+
+def _cleanup_image_blobs(urls) -> None:
+    """Delete DB-stored images that are no longer referenced by any post."""
+    candidates = {name for name in (_upload_filename_from_url(url) for url in urls) if name}
+    if not candidates:
+        return
+    try:
+        remaining = {
+            name
+            for (url,) in Post.query.filter(Post.image_url.contains("/uploads/"))
+            .with_entities(Post.image_url)
+            .all()
+            if (name := _upload_filename_from_url(url)) in candidates
+        }
+        for name in candidates - remaining:
+            ImageBlob.query.filter_by(filename=name).delete(synchronize_session=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to clean up unused image blobs")
+
+
 def _handle_image_upload() -> dict:
     if "file" not in request.files:
         abort(400, description="file is required")
@@ -788,63 +852,83 @@ def _handle_image_upload() -> dict:
         abort(400, description="file is required")
 
     original_name = file.filename
-    safe = secure_filename(original_name) or "upload"
-    ext = Path(safe).suffix.lower()
+    ext = Path(original_name).suffix.lower()
     if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         abort(400, description="Only image uploads are allowed")
+    # secure_filename() strips non-ASCII names (e.g. Cyrillic), so keep the
+    # validated extension as a fallback for Cloudinary's display filename.
+    safe = secure_filename(original_name) or ""
+    if not Path(safe).suffix:
+        safe = f"upload{ext}"
+
+    raw = file.read()
+    if not raw:
+        abort(400, description="file is required")
+
+    try:
+        # verify() checks integrity without decoding the whole image; reopen to
+        # read dimensions/format because the verified object is unusable.
+        with Image.open(io.BytesIO(raw)) as probe:
+            probe.verify()
+        with Image.open(io.BytesIO(raw)) as img:
+            width, height = img.size
+            image_format = (img.format or "").upper()
+    except Exception:
+        abort(400, description="Invalid image")
+
+    content_type = _IMAGE_CONTENT_TYPES.get(image_format) or file.mimetype or "application/octet-stream"
+    stored_ext = _IMAGE_EXTENSIONS.get(image_format, ext)
 
     if current_app.config.get("CLOUDINARY_ENABLED"):
-        # Validate that payload is actually an image before forwarding to Cloudinary.
-        try:
-            with Image.open(file.stream) as img:
-                local_width, local_height = img.size
-        except Exception:
-            abort(400, description="Invalid image")
-        finally:
-            try:
-                file.stream.seek(0)
-            except Exception:
-                pass
-
         try:
             uploaded = cloudinary.uploader.upload(
-                file,
+                io.BytesIO(raw),
+                filename=safe,
                 folder=current_app.config.get("CLOUDINARY_FOLDER", "postbytecl"),
                 resource_type="image",
                 use_filename=True,
                 unique_filename=True,
                 overwrite=False,
             )
+            url = str(uploaded.get("secure_url") or uploaded.get("url") or "")
+            if url:
+                return {
+                    "url": url,
+                    "filename": original_name,
+                    "size": int(uploaded.get("bytes") or len(raw)),
+                    "width": int(uploaded.get("width") or width),
+                    "height": int(uploaded.get("height") or height),
+                }
+            current_app.logger.warning(
+                "Cloudinary upload returned no URL; storing image in the database instead"
+            )
         except Exception:
-            abort(500, description="Cloudinary upload failed")
-
-        return {
-            "url": str(uploaded.get("secure_url") or uploaded.get("url") or ""),
-            "filename": original_name,
-            "size": int(uploaded.get("bytes") or 0),
-            "width": int(uploaded.get("width") or local_width),
-            "height": int(uploaded.get("height") or local_height),
-        }
+            current_app.logger.exception(
+                "Cloudinary upload failed; storing image in the database instead"
+            )
 
     token = secrets.token_hex(8)
-    stored_name = f"{int(datetime.now(timezone.utc).timestamp())}_{token}{ext}"
-    stored_path = Path(current_app.config["UPLOADS_DIR"]) / stored_name
-    file.save(stored_path)
-
-    width = height = 0
+    stored_name = f"{int(datetime.now(timezone.utc).timestamp())}_{token}{stored_ext}"
+    blob = ImageBlob(
+        filename=stored_name,
+        content_type=content_type,
+        data=raw,
+        size=len(raw),
+        width=width,
+        height=height,
+    )
     try:
-        with Image.open(stored_path) as img:
-            width, height = img.size
+        db.session.add(blob)
+        db.session.commit()
     except Exception:
-        stored_path.unlink(missing_ok=True)
-        abort(400, description="Invalid image")
+        db.session.rollback()
+        current_app.logger.exception("Failed to store uploaded image in the database")
+        abort(500, description="Image storage failed")
 
-    size = stored_path.stat().st_size
-    public_url = f"/uploads/{stored_name}"
     return {
-        "url": public_url,
+        "url": f"/uploads/{stored_name}",
         "filename": original_name,
-        "size": size,
+        "size": len(raw),
         "width": width,
         "height": height,
     }

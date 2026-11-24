@@ -44,8 +44,8 @@
 - **Frontend:** `React 19` + `TypeScript` + `Vite` + `TailwindCSS`
 - **Backend:** `Flask` + `SQLAlchemy`
 - **Data Layer:** `PostgreSQL`
-- **Media:** Cloudinary
-- **Deployment:** Render Blueprint (`web + api`)
+- **Media:** PostgreSQL (`image_blobs`), Cloudinary optional
+- **Deployment:** Vercel Services (`web + api`), Render Blueprint
 
 ## Ключевые возможности
 

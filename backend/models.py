@@ -149,6 +149,27 @@ class Post(db.Model):
         }
 
 
+class ImageBlob(db.Model):
+    """
+    Durable image storage for deployments without an external object store.
+
+    Vercel's filesystem is ephemeral, so files written to /tmp disappear when
+    the function instance is recycled. Keeping the bytes in PostgreSQL makes
+    uploads survive cold starts and redeploys.
+    """
+
+    __tablename__ = "image_blobs"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    filename = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    content_type = db.Column(db.String(100), nullable=False, default="application/octet-stream")
+    data = db.Column(db.LargeBinary, nullable=False)
+    size = db.Column(db.Integer, nullable=False, default=0)
+    width = db.Column(db.Integer, nullable=True)
+    height = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+
+
 class Report(db.Model):
     __tablename__ = "reports"
 

@@ -115,9 +115,18 @@ Cookie должна быть `HttpOnly`, `Secure`, `SameSite=Lax`.
 
 Если добавляешь кастомный домен — добавь его в `CORS_ORIGINS` и сделай redeploy.
 
-## 6. Первый администратор
+## 6. Администратор
 
-Зарегистрируйся на сайте, затем в Neon SQL Editor:
+Создать или обновить администратора можно скриптом. Нужен `DATABASE_URL` production-базы из Vercel/Neon:
+
+```powershell
+$env:DATABASE_URL="postgresql://..."
+python -m backend.create_admin --username vlad_adm --password "надёжный-пароль" --email vlad_adm@postbyte.local
+```
+
+Если `--password` не указать, скрипт запросит его без отображения на экране. Тот же скрипт можно запустить с `--database-url "postgresql://..."`.
+
+Альтернатива — зарегистрироваться на сайте, затем в Neon SQL Editor:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE username = 'твой_username';

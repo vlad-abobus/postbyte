@@ -36,6 +36,15 @@ Uploads are stored in the `image_blobs` PostgreSQL table by default and served f
   - `CLOUDINARY_API_SECRET`
   - `CLOUDINARY_FOLDER` (optional, default `postbytecl`)
 
+## Create an admin
+
+```powershell
+$env:DATABASE_URL="postgresql://..."
+python -m backend.create_admin --username vlad_adm --password "change-me" --email vlad_adm@postbyte.local
+```
+
+The script creates the user or updates the existing one. Omit `--password` to be prompted securely.
+
 ## Render production start command
 
 Use this start command in Render web service:

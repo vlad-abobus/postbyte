@@ -44,7 +44,9 @@ export default function App() {
             <Link to="/about" className="post-link">О проекте</Link>
           </div>
           <div className="flex gap-3 md:gap-4 items-center flex-wrap">
-            {user ? (
+            {authLoading ? (
+              <span className="opacity-40" aria-label="Проверка сессии">…</span>
+            ) : user ? (
               <>
                 <span className="flex items-center gap-1 opacity-80">
                   <UserIcon size={12} />

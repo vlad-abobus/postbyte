@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { forumService } from '../services/forumService';
 import { Board } from '../types';
 import { SitePromoBox } from '../components/SitePromoBox';
+import { LoadingState } from '../components/LoadingState';
 
 export function Home() {
   const [boards, setBoards] = useState<Board[]>([]);
@@ -24,7 +25,15 @@ export function Home() {
     fetchBoards();
   }, []);
 
-  if (loading) return <div className="p-4 font-mono">Грузим подключение к серверу 1-3 минуты пожалуйста.</div>;
+  if (loading) {
+    return (
+      <LoadingState
+        title="Подключение к серверу"
+        subtitle="Загружаем список досок..."
+        variant="home"
+      />
+    );
+  }
   if (error) return <div className="p-4 font-mono text-red-700">{error}</div>;
 
   const categories = Array.from(new Set(boards.map(b => b.category)));

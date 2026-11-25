@@ -280,6 +280,10 @@ export const forumService = {
     return await api<User[]>('/api/admin/users');
   },
 
+  async adminListPosts(): Promise<Post[]> {
+    return await api<Post[]>('/api/admin/posts');
+  },
+
   async adminSetUserRole(uid: string, role: 'admin' | 'moderator' | 'user'): Promise<User> {
     const res = await api<{ user: User }>(`/api/admin/users/${encodeURIComponent(uid)}/role`, {
       method: 'PATCH',
@@ -330,12 +334,15 @@ export const forumService = {
   },
 
   // Admin Actions
-  async deletePost(boardId: string, threadId: string, postId: string): Promise<void> {
+  async deletePost(boardId: string, threadId: string, postId: string): Promise<{ ok: boolean; deletedThread?: boolean }> {
     const adminKey = (import.meta as any).env?.VITE_ADMIN_KEY;
-    await api(`/api/boards/${encodeURIComponent(boardId)}/threads/${encodeURIComponent(threadId)}/posts/${encodeURIComponent(postId)}`, {
-      method: 'DELETE',
-      headers: adminKey ? { 'X-Admin-Key': adminKey } : {},
-    });
+    return await api<{ ok: boolean; deletedThread?: boolean }>(
+      `/api/boards/${encodeURIComponent(boardId)}/threads/${encodeURIComponent(threadId)}/posts/${encodeURIComponent(postId)}`,
+      {
+        method: 'DELETE',
+        headers: adminKey ? { 'X-Admin-Key': adminKey } : {},
+      },
+    );
   },
 
   async togglePin(boardId: string, threadId: string, isPinned: boolean): Promise<void> {

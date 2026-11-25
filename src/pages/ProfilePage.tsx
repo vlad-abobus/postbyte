@@ -5,15 +5,18 @@ import { Post, User } from '../types';
 import { formatDate } from '../lib/utils';
 import { Camera, Save, User as UserIcon } from 'lucide-react';
 import { PostItem } from '../components/PostItem';
+import { LoadingState } from '../components/LoadingState';
+import { useAuth } from '../lib/auth';
 
 export function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
+  const { user: me, isStaff, setUser: setAuthUser } = useAuth();
   const [profile, setProfile] = useState<User | null>(null);
-  const [me, setMe] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [editData, setEditData] = useState({ displayName: '', bio: '', photoURL: '' });
 
@@ -24,20 +27,29 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (uid) {
+      setLoading(true);
       const fetchProfile = async () => {
-        const [meRes, p] = await Promise.all([forumService.me().catch(() => ({ user: null })), forumService.getUserProfile(uid)]);
-        setMe(meRes.user);
-        if (p) {
-          setProfile(p);
-          setEditData({ 
-            displayName: p.displayName || '',
-            bio: p.bio || '', 
-            photoURL: p.photoURL || '' 
-          });
-          const userPosts = await forumService.getUserPosts(uid);
-          setPosts(userPosts);
+        try {
+          const p = await forumService.getUserProfile(uid);
+          if (p) {
+            setProfile(p);
+            setEditData({
+              displayName: p.displayName || '',
+              bio: p.bio || '',
+              photoURL: p.photoURL || '',
+            });
+            const userPosts = await forumService.getUserPosts(uid);
+            setPosts(userPosts);
+          } else {
+            setProfile(null);
+            setPosts([]);
+          }
+        } catch {
+          setProfile(null);
+          setPosts([]);
+        } finally {
+          setLoading(false);
         }
-        setLoading(false);
       };
       fetchProfile();
     }
@@ -50,7 +62,7 @@ export function ProfilePage() {
     try {
       const updated = await forumService.updateMeProfile(editData);
       setProfile(updated);
-      setMe(updated);
+      setAuthUser(updated);
       setIsEditing(false);
     } catch (e: any) {
       setSaveError(e?.message || 'Не удалось сохранить профиль');
@@ -59,7 +71,15 @@ export function ProfilePage() {
     }
   };
 
-  if (loading) return <div className="p-4 font-mono">Загрузка профиля...</div>;
+  if (loading) {
+    return (
+      <LoadingState
+        title="Загрузка профиля"
+        subtitle="Получаем данные пользователя..."
+        variant="profile"
+      />
+    );
+  }
   if (!profile) return <div className="p-4 font-mono text-red-600">Пользователь не найден</div>;
 
   return (
@@ -69,8 +89,8 @@ export function ProfilePage() {
           <span>Профиль пользователя: {profile.displayName}</span>
           {isOwnProfile && (
             <button
-              onClick={() => setIsEditing(s => !s)}
-              className="bg-white text-[var(--color-accent)] px-2 py-0.5 rounded text-[10px] uppercase"
+              onClick={() => setIsEditing((s) => !s)}
+              className="bg-white text-[var(--color-accent)] px-2 py-0.5 rounded text-[10px] uppercase cursor-pointer"
             >
               {isEditing ? 'Закрыть' : 'Редактировать'}
             </button>
@@ -86,28 +106,43 @@ export function ProfilePage() {
               ) : (
                 <UserIcon size={64} className="text-[var(--color-border)]" />
               )}
-              
+
               {isOwnProfile && (
-                <label className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer p-2 text-center">
-                  <Camera size={24} />
-                  <span className="text-[10px] font-bold uppercase mt-1">Сменить аватар</span>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*"
+                <label className={`absolute inset-0 bg-black/45 transition-opacity flex flex-col items-center justify-center text-white cursor-pointer p-2 text-center ${avatarUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  {avatarUploading ? (
+                    <>
+                      <span className="loader-inline-spinner mb-1" />
+                      <span className="text-[10px] font-bold uppercase">Загрузка...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera size={24} />
+                      <span className="text-[10px] font-bold uppercase mt-1">Сменить аватар (вкл. GIF)</span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    className="hidden"
+                    disabled={avatarUploading}
+                    accept="image/png,image/jpeg,image/gif,image/webp,.gif,.png,.jpg,.jpeg,.webp"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
+                      e.target.value = '';
                       if (file) {
+                        setAvatarUploading(true);
                         try {
                           const updated = await forumService.uploadMyAvatar(file);
                           setProfile(updated);
-                          setEditData(prev => ({
+                          setAuthUser(updated);
+                          setEditData((prev) => ({
                             ...prev,
                             displayName: updated.displayName || prev.displayName,
                             photoURL: updated.photoURL || '',
                           }));
-                        } catch (err) {
-                          alert("Не удалось загрузить изображение");
+                        } catch (err: any) {
+                          alert(err?.message || 'Не удалось загрузить изображение');
+                        } finally {
+                          setAvatarUploading(false);
                         }
                       }
                     }}
@@ -136,34 +171,34 @@ export function ProfilePage() {
                   <input
                     type="text"
                     value={editData.displayName}
-                    onChange={e => setEditData({ ...editData, displayName: e.target.value })}
+                    onChange={(e) => setEditData({ ...editData, displayName: e.target.value })}
                     className="w-full border border-[var(--color-border)] p-1 text-xs"
                     placeholder="3-32 символа, пробелы разрешены"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase mb-1">Ссылка на аватар</label>
-                  <input 
-                    type="text" 
-                    value={editData.photoURL} 
-                    onChange={e => setEditData({ ...editData, photoURL: e.target.value })}
+                  <label className="block text-[10px] font-bold uppercase mb-1">Ссылка на аватар (поддерживает GIF)</label>
+                  <input
+                    type="text"
+                    value={editData.photoURL}
+                    onChange={(e) => setEditData({ ...editData, photoURL: e.target.value })}
                     className="w-full border border-[var(--color-border)] p-1 text-xs"
                     placeholder="https://..."
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold uppercase mb-1">О себе</label>
-                  <textarea 
-                    value={editData.bio} 
-                    onChange={e => setEditData({ ...editData, bio: e.target.value })}
+                  <textarea
+                    value={editData.bio}
+                    onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
                     className="w-full border border-[var(--color-border)] p-1 text-xs h-24 resize-none"
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="bg-[var(--color-accent)] text-white px-4 py-1 text-[10px] font-bold uppercase flex items-center gap-1 disabled:opacity-60"
+                    className="bg-[var(--color-accent)] text-white px-4 py-1 text-[10px] font-bold uppercase flex items-center gap-1 disabled:opacity-60 cursor-pointer"
                   >
                     <Save size={12} /> {saving ? 'Сохраняем...' : 'Сохранить'}
                   </button>
@@ -180,7 +215,7 @@ export function ProfilePage() {
                 </div>
                 <div>
                   <h3 className="text-[10px] font-bold uppercase text-[var(--color-post-header)]">О себе</h3>
-                  <p className="text-xs whitespace-pre-wrap">{profile.bio || "Описание пока не добавлено."}</p>
+                  <p className="text-xs whitespace-pre-wrap">{profile.bio || 'Описание пока не добавлено.'}</p>
                 </div>
               </div>
             )}
@@ -195,14 +230,28 @@ export function ProfilePage() {
           <p className="text-xs italic opacity-50">Пока нет постов.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {posts.map(p => (
+            {posts.map((p) => (
               <div key={p.id}>
                 <div className="text-[10px] text-[var(--color-muted)] mb-1">
                   <Link to={`/${p.boardId}/thread/${p.threadId}`} className="post-link">
                     /{p.boardId}/ thread #{p.threadId}
                   </Link>
                 </div>
-                <PostItem post={p} isOp={p.isOp} hideActions />
+                <PostItem
+                  post={p}
+                  isOp={p.isOp}
+                  boardId={p.boardId}
+                  threadId={p.threadId}
+                  canDelete={isStaff || isOwnProfile}
+                  onDelete={({ postId, deletedThread }) => {
+                    setPosts((prev) =>
+                      deletedThread
+                        ? prev.filter((item) => !(item.boardId === p.boardId && item.threadId === p.threadId))
+                        : prev.filter((item) => item.id !== postId),
+                    );
+                  }}
+                  hideActions
+                />
               </div>
             ))}
           </div>

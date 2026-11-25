@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Home } from './pages/Home';
 import { BoardPage } from './pages/BoardPage';
@@ -6,31 +5,14 @@ import { ThreadPage } from './pages/ThreadPage';
 import { Rules } from './pages/Rules';
 import { About } from './pages/About';
 import { Info, LogIn, LogOut, Shield, User as UserIcon } from 'lucide-react';
-import { forumService } from './services/forumService';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
-import { User } from './types';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
+import { AuthProvider, useAuth } from './lib/auth';
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  // Don't show "Войти" while the session is still being checked: after a
-  // login redirect it looks like the login did nothing.
-  const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    forumService
-      .me()
-      .then((r) => setUser(r.user))
-      .catch(() => setUser(null))
-      .finally(() => setAuthLoading(false));
-  }, []);
-
-  const doLogout = async () => {
-    await forumService.logout();
-    setUser(null);
-  };
+function AppShell() {
+  const { user, authLoading, isStaff, logout } = useAuth();
 
   return (
     <BrowserRouter>
@@ -45,7 +27,9 @@ export default function App() {
           </div>
           <div className="flex gap-3 md:gap-4 items-center flex-wrap">
             {authLoading ? (
-              <span className="opacity-40" aria-label="Проверка сессии">…</span>
+              <span className="inline-flex items-center gap-1.5 opacity-60" aria-label="Проверка сессии">
+                <span className="loader-inline-spinner" aria-hidden="true" />
+              </span>
             ) : user ? (
               <>
                 <span className="flex items-center gap-1 opacity-80">
@@ -54,13 +38,13 @@ export default function App() {
                     {user.displayName || user.email}
                   </Link>
                 </span>
-                {user.role === 'admin' && (
+                {isStaff && (
                   <Link to="/admin" className="post-link inline-flex items-center gap-1">
                     <Shield size={12} />
                     Админ-панель
                   </Link>
                 )}
-                <button onClick={doLogout} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1">
+                <button onClick={logout} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1">
                   <LogOut size={12} />
                   Выйти
                 </button>
@@ -100,5 +84,13 @@ export default function App() {
         </footer>
       </div>
     </BrowserRouter>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   );
 }

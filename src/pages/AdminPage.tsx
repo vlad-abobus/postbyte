@@ -1,34 +1,45 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
 import { forumService } from '../services/forumService';
-import { IpAction, User } from '../types';
-import { formatDate } from '../lib/utils';
+import { IpAction, Post, Report, User } from '../types';
+import { formatDate, isGifImage } from '../lib/utils';
+import { LoadingState } from '../components/LoadingState';
+import { useAuth } from '../lib/auth';
+import { Trash2 } from 'lucide-react';
 
 export function AdminPage() {
-  const [me, setMe] = useState<User | null>(null);
+  const { authLoading, isStaff } = useAuth();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
   const [actions, setActions] = useState<IpAction[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [form, setForm] = useState({ type: 'ban' as 'ban' | 'mute', ip: '', reason: '', durationHours: '' });
   const [clearIp, setClearIp] = useState('');
   const [clearType, setClearType] = useState<'all' | 'ban' | 'mute'>('all');
 
-  const isAdmin = useMemo(() => me?.role === 'admin' || me?.role === 'moderator', [me?.role]);
-
   const loadAll = async () => {
-    const [meRes, usersRes, actionsRes] = await Promise.all([
-      forumService.me(),
+    const [usersRes, actionsRes, postsRes, reportsRes] = await Promise.all([
       forumService.adminListUsers(),
       forumService.adminListIpActions(),
+      forumService.adminListPosts(),
+      forumService.getReports().catch(() => [] as Report[]),
     ]);
-    setMe(meRes.user);
     setUsers(usersRes);
     setActions(actionsRes);
+    setPosts(postsRes);
+    setReports(reportsRes);
   };
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!isStaff) {
+      setLoading(false);
+      return;
+    }
     const run = async () => {
       setLoading(true);
       setError('');
@@ -41,7 +52,7 @@ export function AdminPage() {
       }
     };
     run();
-  }, []);
+  }, [authLoading, isStaff]);
 
   const setRole = async (uid: string, role: 'admin' | 'moderator' | 'user') => {
     setSaving(true);
@@ -53,6 +64,23 @@ export function AdminPage() {
       setError(e?.message || 'Не удалось изменить роль');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const deleteAnyPost = async (boardId: string, threadId: string, postId: string, isOp?: boolean) => {
+    const msg = isOp
+      ? `Удалить весь тред #${threadId} в /${boardId}/ (ОП-пост и все ответы)?`
+      : `Удалить пост #${postId} в /${boardId}/ thread #${threadId}?`;
+    if (!window.confirm(msg)) return;
+    setDeletingPostId(postId);
+    setError('');
+    try {
+      await forumService.deletePost(boardId, threadId, postId);
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message || 'Не удалось удалить пост');
+    } finally {
+      setDeletingPostId(null);
     }
   };
 
@@ -102,18 +130,123 @@ export function AdminPage() {
     }
   };
 
-  if (loading) return <div className="p-4 font-mono">Загрузка админ-панели...</div>;
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (authLoading || loading) {
+    return (
+      <LoadingState
+        title="Загрузка админ-панели"
+        subtitle="Получаем пользователей, посты и настройки..."
+        variant="admin"
+      />
+    );
+  }
+  if (!isStaff) return <Navigate to="/" replace />;
+
+  const pendingReports = reports.filter((r) => r.status === 'pending');
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
         <h1 className="font-bold text-lg">Админ-панель</h1>
-        <p className="text-xs opacity-70">Управление аккаунтами, ролями, IP-мутами и банами.</p>
+        <p className="text-xs opacity-70">Управление аккаунтами, ролями, модерация любых постов, IP-муты и баны.</p>
       </div>
 
       {error && <div className="p-2 text-xs border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)]">{error}</div>}
 
+      {/* Pending Reports */}
+      {pendingReports.length > 0 && (
+        <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
+          <h2 className="font-bold mb-2">Жалобы ({pendingReports.length})</h2>
+          <div className="space-y-2">
+            {pendingReports.map((r) => (
+              <div key={r.id} className="border border-[var(--color-border)] bg-white/60 p-2 text-xs flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+                <Link to={`/${r.boardId}/thread/${r.threadId}`} className="post-link font-mono font-bold">
+                  /{r.boardId}/ #{r.threadId} → пост #{r.postId}
+                </Link>
+                <span className="flex-1">{r.reason}</span>
+                <span className="opacity-70">{formatDate(r.createdAt)}</span>
+                <button
+                  type="button"
+                  disabled={deletingPostId === r.postId}
+                  onClick={() => deleteAnyPost(r.boardId, r.threadId, r.postId)}
+                  className="post-link text-red-700 hover:text-red-900 bg-transparent border-none p-0 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                >
+                  <Trash2 size={11} />
+                  Удалить пост
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Recent Posts Moderation */}
+      <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
+        <h2 className="font-bold mb-2">Последние посты ({posts.length})</h2>
+        {posts.length === 0 ? (
+          <div className="text-xs opacity-60">Постов пока нет.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--color-border)]">
+                  <th className="text-left py-1 pr-2">Тред</th>
+                  <th className="text-left py-1 pr-2">Автор</th>
+                  <th className="text-left py-1 pr-2">Контент</th>
+                  <th className="text-left py-1 pr-2">Дата</th>
+                  <th className="text-right py-1">Действие</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.map((p) => {
+                  const gif = isGifImage(p.image?.url, p.image?.filename);
+                  return (
+                    <tr key={p.id} className="border-b border-[var(--color-border)]/50">
+                      <td className="py-1.5 pr-2 whitespace-nowrap">
+                        <Link to={`/${p.boardId}/thread/${p.threadId}`} className="post-link font-mono">
+                          /{p.boardId}/ #{p.threadId}
+                        </Link>
+                        {p.isOp && (
+                          <span className="ml-1 px-1 py-0.5 text-[9px] bg-[var(--color-accent)] text-white font-bold uppercase">
+                            OP
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap">
+                        <span className="font-bold">{p.authorName || 'Аноним'}</span>
+                        {p.ip && <span className="ml-1 font-mono text-[10px] opacity-60">({p.ip})</span>}
+                      </td>
+                      <td className="py-1.5 pr-2 max-w-md">
+                        <div className="flex items-center gap-1.5 truncate">
+                          {p.image?.url && (
+                            <span className="px-1 py-0.5 text-[9px] bg-[var(--color-post-header)] text-white font-bold uppercase shrink-0">
+                              {gif ? 'GIF' : 'IMG'}
+                            </span>
+                          )}
+                          <span className="truncate">{p.content || '(без текста)'}</span>
+                        </div>
+                      </td>
+                      <td className="py-1.5 pr-2 whitespace-nowrap opacity-70">{formatDate(p.createdAt)}</td>
+                      <td className="py-1.5 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          disabled={deletingPostId === p.id}
+                          onClick={() => deleteAnyPost(p.boardId, p.threadId, p.id, p.isOp)}
+                          className="post-link text-red-700 hover:text-red-900 bg-transparent border-none p-0 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Trash2 size={11} />
+                          {deletingPostId === p.id ? 'Удаление...' : p.isOp ? 'Удалить тред' : 'Удалить'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Users */}
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
         <h2 className="font-bold mb-2">Пользователи</h2>
         <div className="overflow-x-auto">
@@ -151,6 +284,7 @@ export function AdminPage() {
         </div>
       </div>
 
+      {/* IP Bans / Mutes */}
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
         <h2 className="font-bold mb-2">IP-мут / бан</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">

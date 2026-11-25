@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { forumService } from '../services/forumService';
-import { Board, Thread } from '../types';
+import { Board, Post, Thread } from '../types';
 import { PostForm } from '../components/PostForm';
 import { PostItem } from '../components/PostItem';
-import { formatDate } from '../lib/utils';
+import { LoadingState } from '../components/LoadingState';
+import { useAuth } from '../lib/auth';
 import { Pin, Lock } from 'lucide-react';
 
 export function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
+  const { user: me, isStaff } = useAuth();
   const [board, setBoard] = useState<Board | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,18 +18,32 @@ export function BoardPage() {
 
   useEffect(() => {
     if (boardId) {
+      setLoading(true);
       const fetchBoard = async () => {
-        const b = await forumService.getBoard(boardId);
-        const t = await forumService.getThreads(boardId);
-        setBoard(b);
-        setThreads(t);
-        setLoading(false);
+        try {
+          const [b, t] = await Promise.all([
+            forumService.getBoard(boardId),
+            forumService.getThreads(boardId),
+          ]);
+          setBoard(b);
+          setThreads(t);
+        } finally {
+          setLoading(false);
+        }
       };
       fetchBoard();
     }
   }, [boardId]);
 
-  if (loading) return <div className="p-4 font-mono">Мы грузим подключение к серверу</div>;
+  if (loading) {
+    return (
+      <LoadingState
+        title={`Загрузка доски /${boardId}/`}
+        subtitle="Подключаемся к серверу и получаем треды..."
+        variant="board"
+      />
+    );
+  }
   if (!board) return <div className="p-4 font-mono text-red-600">Доска не найдена.</div>;
 
   return (
@@ -39,7 +55,7 @@ export function BoardPage() {
 
       <div className="flex justify-center mb-8">
         {!showForm ? (
-          <button 
+          <button
             onClick={() => setShowForm(true)}
             className="text-[var(--color-link)] underline font-bold cursor-pointer hover:text-[var(--color-link-hover)]"
           >
@@ -47,11 +63,10 @@ export function BoardPage() {
           </button>
         ) : (
           <div className="w-full max-w-lg">
-            <PostForm 
-              boardId={board.id} 
+            <PostForm
+              boardId={board.id}
               onSuccess={() => {
                 setShowForm(false);
-                // Refresh threads
                 forumService.getThreads(board.id).then(setThreads);
               }}
               onCancel={() => setShowForm(false)}
@@ -66,8 +81,15 @@ export function BoardPage() {
           <div className="text-center py-10 opacity-50">Пока нет тредов. Будьте первым.</div>
         ) : (
           <div className="flex flex-col gap-8">
-            {threads.map(thread => (
-              <ThreadPreview key={thread.id} thread={thread} boardId={board.id} />
+            {threads.map((thread) => (
+              <ThreadPreview
+                key={thread.id}
+                thread={thread}
+                boardId={board.id}
+                currentUid={me?.uid}
+                isStaff={isStaff}
+                onDeleted={() => setThreads((prev) => prev.filter((item) => item.id !== thread.id))}
+              />
             ))}
           </div>
         )}
@@ -76,19 +98,51 @@ export function BoardPage() {
   );
 }
 
-function ThreadPreview({ thread, boardId }: { thread: Thread, boardId: string }) {
-  const [opPost, setOpPost] = useState<any>(null);
+function ThreadPreview({
+  thread,
+  boardId,
+  currentUid,
+  isStaff,
+  onDeleted,
+}: {
+  thread: Thread;
+  boardId: string;
+  currentUid?: string;
+  isStaff: boolean;
+  onDeleted: () => void;
+}) {
+  const [opPost, setOpPost] = useState<Post | null>(null);
 
   useEffect(() => {
-    forumService.getPosts(boardId, thread.id).then(posts => {
-      setOpPost(posts.find(p => p.isOp));
-    });
+    let active = true;
+    forumService
+      .getPosts(boardId, thread.id)
+      .then((posts) => {
+        if (active) setOpPost(posts.find((p) => p.isOp) || null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
   }, [boardId, thread.id]);
+
+  const canDeleteOp = isStaff || (!!currentUid && !!opPost?.authorUid && currentUid === opPost.authorUid);
 
   return (
     <div className="border-b border-dotted border-[var(--color-border)] pb-8 mb-4">
       <div className="flex flex-col md:flex-row gap-4">
-        {opPost && <PostItem post={opPost} isPreview hideActions />}
+        {opPost && (
+          <PostItem
+            post={opPost}
+            isOp
+            boardId={boardId}
+            threadId={thread.id}
+            canDelete={canDeleteOp}
+            onDelete={onDeleted}
+            isPreview
+            hideActions
+          />
+        )}
       </div>
       <div className="mt-2 text-xs opacity-70 ml-2">
         <Link to={`/${boardId}/thread/${thread.id}`} className="post-link font-bold">

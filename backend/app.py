@@ -31,7 +31,7 @@ from flask import (
     stream_with_context,
 )
 from flask_cors import CORS
-from PIL import Image
+from PIL import Image, ImageFile
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -340,15 +340,18 @@ def create_app() -> Flask:
             abort(401, description="Not authenticated")
         return u
 
+    def _is_staff(user: User | None) -> bool:
+        return bool(user and (user.role or "").strip().lower() in {"admin", "moderator"})
+
     def _require_admin_session() -> User:
         u = _require_login()
-        if u.role not in {"admin", "moderator"}:
+        if not _is_staff(u):
             abort(403, description="Admin access required")
         return u
 
     def _require_admin_access() -> User | None:
         u = _current_user()
-        if u and u.role in {"admin", "moderator"}:
+        if _is_staff(u):
             return u
         _require_admin_key()
         return None
@@ -504,6 +507,12 @@ def create_app() -> Flask:
         _require_admin_access()
         users = User.query.order_by(User.created_at.desc()).limit(200).all()
         return jsonify([u.to_public_dict(include_email=True) for u in users])
+
+    @app.get("/api/admin/posts")
+    def admin_list_posts():
+        _require_admin_access()
+        posts = Post.query.order_by(Post.created_at.desc()).limit(100).all()
+        return jsonify([p.to_dict() for p in posts])
 
     @app.patch("/api/admin/users/<uid>/role")
     def admin_set_user_role(uid: str):
@@ -665,8 +674,8 @@ def create_app() -> Flask:
         current_user = _current_user()
         author_user_id: int | None = None
 
-        if not content:
-            abort(400, description="content is required")
+        if not content and not (isinstance(image, dict) and image.get("url")):
+            abort(400, description="content or image is required")
 
         if not author_name:
             if current_user:
@@ -718,8 +727,8 @@ def create_app() -> Flask:
         current_user = _current_user()
         author_user_id: int | None = None
 
-        if not content:
-            abort(400, description="content is required")
+        if not content and not (isinstance(image, dict) and image.get("url")):
+            abort(400, description="content or image is required")
 
         if not author_name:
             if current_user:
@@ -782,30 +791,40 @@ def create_app() -> Flask:
     @app.delete("/api/boards/<board_id>/threads/<thread_id>/posts/<post_id>")
     def delete_post(board_id: str, thread_id: str, post_id: str):
         actor = _current_user()
-        has_admin_access = bool(actor and actor.role in {"admin", "moderator"}) or _has_valid_admin_key()
+        has_admin_access = _is_staff(actor) or _has_valid_admin_key()
         t = _require_thread(board_id, thread_id)
-        p = Post.query.filter_by(board_id=board_id, thread_id=t.id, id=int(post_id)).first()
+        try:
+            post_id_int = int(post_id)
+        except (TypeError, ValueError):
+            abort(404, description="Post not found")
+        p = Post.query.filter_by(board_id=board_id, thread_id=t.id, id=post_id_int).first()
         if not p:
-            return jsonify({"ok": True})
+            return jsonify({"ok": True, "deletedThread": False})
         is_post_owner = bool(actor and p.author_user_id and actor.id == p.author_user_id)
         if not (has_admin_access or is_post_owner):
             abort(403, description="You can delete only your own posts")
 
         if p.is_op:
             image_urls = [post.image_url for post in t.posts]
+            Report.query.filter_by(board_id=board_id, thread_id=t.id).update(
+                {"status": "resolved"}, synchronize_session=False
+            )
             db.session.delete(t)
             db.session.commit()
             _cleanup_image_blobs(image_urls)
-            return jsonify({"ok": True})
+            return jsonify({"ok": True, "deletedThread": True})
 
         deleted_image_url = p.image_url
+        Report.query.filter_by(board_id=board_id, thread_id=t.id, post_id=p.id).update(
+            {"status": "resolved"}, synchronize_session=False
+        )
         db.session.delete(p)
         t.reply_count = max(0, t.reply_count - 1)
         if p.image_url:
             t.image_count = max(0, t.image_count - 1)
         db.session.commit()
         _cleanup_image_blobs([deleted_image_url])
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "deletedThread": False})
 
     @app.post("/api/uploads")
     def upload_image():
@@ -821,9 +840,9 @@ def create_app() -> Flask:
         except (TypeError, ValueError):
             abort(400, description="size is required")
 
-        ext = Path(filename).suffix.lower()
-        if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-            abort(400, description="Only image uploads are allowed")
+        ext = _resolve_image_ext(filename, content_type)
+        if not ext:
+            abort(400, description="Only image uploads are allowed (PNG, JPG, GIF, WebP)")
         if total_size <= 0:
             abort(400, description="size is required")
         if total_size > current_app.config["MAX_IMAGE_BYTES"]:
@@ -1034,6 +1053,22 @@ _IMAGE_EXTENSIONS = {
     "GIF": ".gif",
     "WEBP": ".webp",
 }
+_IMAGE_MIME_TO_EXT = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+_ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _resolve_image_ext(filename: str | None, content_type: str | None = None) -> str | None:
+    ext = Path((filename or "").strip()).suffix.lower()
+    if ext in _ALLOWED_IMAGE_EXTS:
+        return ext
+    mime = (content_type or "").split(";", 1)[0].strip().lower()
+    return _IMAGE_MIME_TO_EXT.get(mime)
 
 
 def _upload_filename_from_url(url: str | None) -> str | None:
@@ -1106,23 +1141,8 @@ def _handle_image_upload() -> dict:
     return _store_image_bytes(raw, file.filename, file.mimetype)
 
 
-def _store_image_bytes(
-    raw: bytes,
-    original_name: str,
-    declared_content_type: str | None = None,
-) -> dict:
-    if not raw:
-        abort(400, description="file is required")
-
-    ext = Path(original_name).suffix.lower()
-    if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
-        abort(400, description="Only image uploads are allowed")
-    # secure_filename() strips non-ASCII names (e.g. Cyrillic), so keep the
-    # validated extension as a fallback for Cloudinary's display filename.
-    safe = secure_filename(original_name) or ""
-    if not Path(safe).suffix:
-        safe = f"upload{ext}"
-
+def _probe_image_metadata(raw: bytes) -> tuple[int, int, str]:
+    """Validate uploaded image bytes and return (width, height, format)."""
     try:
         # verify() checks integrity without decoding the whole image; reopen to
         # read dimensions/format because the verified object is unusable.
@@ -1131,15 +1151,56 @@ def _store_image_bytes(
         with Image.open(io.BytesIO(raw)) as img:
             width, height = img.size
             image_format = (img.format or "").upper()
+            if image_format in _IMAGE_CONTENT_TYPES and width > 0 and height > 0:
+                return width, height, image_format
     except Exception:
-        abort(400, description="Invalid image")
+        pass
 
-    content_type = (
-        _IMAGE_CONTENT_TYPES.get(image_format)
-        or declared_content_type
-        or "application/octet-stream"
-    )
-    stored_ext = _IMAGE_EXTENSIONS.get(image_format, ext)
+    # Some real-world animated GIFs (e.g. from Tenor/Discord/Telegram) have
+    # minor trailing bytes or truncated final frames that fail strict verify()
+    # while playing cleanly in every browser. Allow them if Pillow can still
+    # read the GIF header and valid dimensions.
+    if raw[:6] in {b"GIF87a", b"GIF89a"}:
+        prev_truncated = ImageFile.LOAD_TRUNCATED_IMAGES
+        try:
+            ImageFile.LOAD_TRUNCATED_IMAGES = True
+            with Image.open(io.BytesIO(raw)) as img:
+                width, height = img.size
+                image_format = (img.format or "").upper()
+                if image_format == "GIF" and width > 0 and height > 0:
+                    return width, height, "GIF"
+        except Exception:
+            pass
+        finally:
+            ImageFile.LOAD_TRUNCATED_IMAGES = prev_truncated
+
+    abort(400, description="Invalid image")
+
+
+def _store_image_bytes(
+    raw: bytes,
+    original_name: str,
+    declared_content_type: str | None = None,
+) -> dict:
+    if not raw:
+        abort(400, description="file is required")
+
+    ext = _resolve_image_ext(original_name, declared_content_type)
+    if not ext:
+        abort(400, description="Only image uploads are allowed (PNG, JPG, GIF, WebP)")
+
+    width, height, image_format = _probe_image_metadata(raw)
+    content_type = _IMAGE_CONTENT_TYPES[image_format]
+    stored_ext = _IMAGE_EXTENSIONS[image_format]
+
+    # secure_filename() strips non-ASCII names (e.g. Cyrillic), so keep the
+    # validated extension as a fallback for Cloudinary's display filename.
+    safe = secure_filename(original_name or "") or ""
+    if not Path(safe).suffix:
+        safe = f"upload{stored_ext}"
+    display_name = (original_name or "").strip() or f"image{stored_ext}"
+    if not Path(display_name).suffix:
+        display_name = f"{display_name}{stored_ext}"
 
     if current_app.config.get("CLOUDINARY_ENABLED"):
         try:
@@ -1156,7 +1217,7 @@ def _store_image_bytes(
             if url:
                 return {
                     "url": url,
-                    "filename": original_name,
+                    "filename": display_name,
                     "size": int(uploaded.get("bytes") or len(raw)),
                     "width": int(uploaded.get("width") or width),
                     "height": int(uploaded.get("height") or height),
@@ -1189,7 +1250,7 @@ def _store_image_bytes(
 
     return {
         "url": f"/uploads/{stored_name}",
-        "filename": original_name,
+        "filename": display_name,
         "size": len(raw),
         "width": width,
         "height": height,
@@ -1256,10 +1317,26 @@ def _require_board(board_id: str) -> Board:
 
 def _require_thread(board_id: str, thread_id: str) -> Thread:
     _require_board(board_id)
-    t = Thread.query.filter_by(board_id=board_id, id=int(thread_id)).first()
+    try:
+        thread_id_int = int(thread_id)
+    except (TypeError, ValueError):
+        abort(404, description="Thread not found")
+    t = Thread.query.filter_by(board_id=board_id, id=thread_id_int).first()
     if not t:
         abort(404, description="Thread not found")
     return t
+
+
+def _sanitize_image_url(raw_url: str) -> str:
+    url = raw_url.strip()
+    if not url:
+        return ""
+    if url.startswith("/uploads/"):
+        return url
+    parsed = urlparse(url)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return url
+    abort(400, description="Invalid image URL")
 
 
 def _create_post(
@@ -1283,8 +1360,8 @@ def _create_post(
         ip=ip,
     )
     if image and isinstance(image, dict) and image.get("url"):
-        p.image_url = str(image.get("url"))
-        p.image_filename = str(image.get("filename") or "")
+        p.image_url = _sanitize_image_url(str(image.get("url")))
+        p.image_filename = str(image.get("filename") or "")[:500]
         p.image_size = int(image.get("size") or 0)
         p.image_width = int(image.get("width") or 0)
         p.image_height = int(image.get("height") or 0)

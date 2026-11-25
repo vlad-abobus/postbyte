@@ -117,3 +117,152 @@
   @apply w-[180px] h-[180px] border border-[var(--color-border)] bg-white object-cover;
 }
 
+/* Loading animation */
+@keyframes loader-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loader-spin-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes loader-bar-bounce {
+  0%, 100% {
+    transform: scaleY(0.35);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@keyframes loader-progress-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+@keyframes loader-dot-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes loader-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.loader-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: #d7f5d0;
+  display: inline-block;
+  animation: loader-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.loader-ring-outer {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2.5px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-top-color: var(--color-accent);
+  border-right-color: var(--color-accent);
+  animation: loader-spin 1.15s cubic-bezier(0.55, 0.25, 0.45, 0.75) infinite;
+}
+
+.loader-ring-inner {
+  position: absolute;
+  inset: 7px;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--color-border) 35%, transparent);
+  border-bottom-color: var(--color-post-header);
+  animation: loader-spin-reverse 1.6s linear infinite;
+}
+
+.loader-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 16px;
+}
+
+.loader-bars span {
+  width: 3px;
+  height: 100%;
+  background-color: var(--color-accent);
+  transform-origin: bottom;
+  animation: loader-bar-bounce 0.9s ease-in-out infinite;
+}
+
+.loader-bars span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+
+.loader-bars span:nth-child(3) {
+  animation-delay: 0.28s;
+}
+
+.loader-bars span:nth-child(4) {
+  animation-delay: 0.42s;
+}
+
+.loader-progress-bar {
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-accent) 25%,
+    var(--color-link-hover) 55%,
+    var(--color-accent) 80%,
+    transparent 100%
+  );
+  animation: loader-progress-slide 1.35s ease-in-out infinite;
+}
+
+.loader-skeleton {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-border) 28%, transparent) 25%,
+    color-mix(in srgb, var(--color-post-highlight) 70%, white 20%) 50%,
+    color-mix(in srgb, var(--color-border) 28%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: loader-shimmer 1.6s linear infinite;
+}
+
+.loader-inline-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--color-border) 45%, transparent);
+  border-top-color: var(--color-accent);
+  display: inline-block;
+  animation: loader-spin 0.8s linear infinite;
+}
+
+.gif-badge {
+  @apply absolute top-1 left-1 px-1.5 py-0.5 text-[9px] font-bold tracking-wider uppercase bg-black/75 text-white border border-white/30 leading-none pointer-events-none;
+}
+
+

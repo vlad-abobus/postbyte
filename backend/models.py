@@ -170,6 +170,46 @@ class ImageBlob(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
 
 
+class UploadSession(db.Model):
+    """Metadata for an image uploaded in multiple requests."""
+
+    __tablename__ = "upload_sessions"
+
+    id = db.Column(db.String(64), primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    content_type = db.Column(db.String(100), nullable=False, default="application/octet-stream")
+    total_size = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+
+    chunks = db.relationship(
+        "UploadChunk", back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class UploadChunk(db.Model):
+    """One slice of a chunked image upload (Vercel caps request bodies)."""
+
+    __tablename__ = "upload_chunks"
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    upload_id = db.Column(
+        db.String(64),
+        db.ForeignKey("upload_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    idx = db.Column(db.Integer, nullable=False)
+    data = db.Column(db.LargeBinary, nullable=False)
+    size = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow, index=True)
+
+    session = db.relationship("UploadSession", back_populates="chunks")
+
+    __table_args__ = (
+        db.UniqueConstraint("upload_id", "idx", name="uq_upload_chunk_index"),
+    )
+
+
 class Report(db.Model):
     __tablename__ = "reports"
 

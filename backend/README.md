@@ -20,12 +20,16 @@ The API will be at `http://localhost:5000`.
 
 Uploads are stored in the `image_blobs` PostgreSQL table by default and served from `http://localhost:5000/uploads/<file>`. This also works on hosts with ephemeral disks (Vercel). If Cloudinary is configured, new images are uploaded there instead.
 
+Files up to ~3.5 MB use one request. Larger images (including animated GIFs) are uploaded in chunks to `/api/uploads/chunked/*`, then assembled in PostgreSQL. GIFs are stored byte-for-byte, so animations are preserved. Large images are streamed from `/uploads/<file>` to avoid Vercel's 4.5 MB response limit.
+
 ## Environment variables
 
 - `DATABASE_URL`: PostgreSQL SQLAlchemy URL  
   Example: `postgresql+psycopg://postgres:postgres@localhost:5432/postbytecl`
 - `UPLOADS_DIR`: legacy/local upload folder (default `uploads`); new images are stored in PostgreSQL unless Cloudinary is enabled
-- `MAX_UPLOAD_BYTES`: max upload size in bytes (default 5MB)
+- `MAX_UPLOAD_BYTES`: max size of one HTTP request in bytes (default 4 MB; keep below Vercel's 4.5 MB limit)
+- `MAX_IMAGE_BYTES`: max total image size in bytes (default 15 MB)
+- `UPLOAD_CHUNK_BYTES`: chunk size for large uploads (default 3 MB)
 - `CORS_ORIGINS`: comma-separated origins allowed to call `/api/*` (default `http://localhost:3000`)
 - `ADMIN_KEY`: if set, required for:
   - `GET /api/reports` (header `X-Admin-Key`)

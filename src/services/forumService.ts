@@ -29,6 +29,104 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export interface UploadedImage {
+  url: string;
+  filename: string;
+  size: number;
+  width?: number;
+  height?: number;
+}
+
+// Vercel rejects request bodies above 4.5 MB before Flask sees them. Small
+// images use one request; larger ones are split into chunks below that limit.
+const SINGLE_UPLOAD_LIMIT = 3.5 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const MAX_IMAGE_MB = Math.floor(MAX_IMAGE_BYTES / (1024 * 1024));
+
+async function readUploadError(res: Response): Promise<string> {
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const body = (await res.json().catch(() => null)) as any;
+    if (body?.error || body?.message) return String(body.error || body.message);
+  }
+  if (res.status === 413) {
+    return `Файл слишком большой. Максимум ${MAX_IMAGE_MB} МБ.`;
+  }
+  const text = await res.text().catch(() => '');
+  return text.trim() || `Не удалось загрузить файл (${res.status}).`;
+}
+
+function normalizeUpload(uploaded: any, file: File): UploadedImage {
+  const rawUrl = String(uploaded?.url || '');
+  return {
+    url: rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`,
+    filename: uploaded?.filename || file.name,
+    size: Number(uploaded?.size) || file.size,
+    width: Number(uploaded?.width) || undefined,
+    height: Number(uploaded?.height) || undefined,
+  };
+}
+
+async function uploadSingle(file: File): Promise<UploadedImage> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_BASE}/api/uploads`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(await readUploadError(res));
+  return normalizeUpload(await res.json(), file);
+}
+
+async function uploadChunked(
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<UploadedImage> {
+  const init = await api<{ uploadId: string; chunkSize: number }>('/api/uploads/chunked/init', {
+    method: 'POST',
+    body: JSON.stringify({
+      filename: file.name,
+      size: file.size,
+      contentType: file.type || 'application/octet-stream',
+    }),
+  });
+  const uploadId = init.uploadId;
+  const chunkSize = Math.max(256 * 1024, Number(init.chunkSize) || 3 * 1024 * 1024);
+
+  try {
+    let index = 0;
+    for (let offset = 0; offset < file.size; offset += chunkSize, index += 1) {
+      const chunk = file.slice(offset, Math.min(offset + chunkSize, file.size));
+      const res = await fetch(
+        `${API_BASE}/api/uploads/chunked/${encodeURIComponent(uploadId)}/${index}`,
+        {
+          method: 'POST',
+          body: chunk,
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/octet-stream' },
+        },
+      );
+      if (!res.ok) throw new Error(await readUploadError(res));
+      onProgress?.(Math.min(99, Math.round(((offset + chunk.size) / file.size) * 100)));
+    }
+
+    const done = await api<any>(
+      `/api/uploads/chunked/${encodeURIComponent(uploadId)}/complete`,
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+    onProgress?.(100);
+    return normalizeUpload(done, file);
+  } catch (error) {
+    // Best-effort cleanup so abandoned chunks don't linger in the database.
+    fetch(`${API_BASE}/api/uploads/chunked/${encodeURIComponent(uploadId)}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    }).catch(() => {});
+    throw error;
+  }
+}
+
 export const forumService = {
   // Auth + Captcha
   async getCaptcha(): Promise<{ captchaId: string; image: string }> {
@@ -60,21 +158,30 @@ export const forumService = {
   },
 
   // Image Upload
-  async uploadImage(file: File): Promise<{ url: string; filename: string; size: number }> {
+  async uploadImage(
+    file: File,
+    onProgress?: (percent: number) => void,
+  ): Promise<UploadedImage> {
+    const looksLikeImage =
+      file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp)$/i.test(file.name);
+    if (!looksLikeImage) {
+      throw new Error('Можно загружать только изображения (PNG, JPG, GIF, WebP).');
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      throw new Error(`Файл слишком большой. Максимум ${MAX_IMAGE_MB} МБ.`);
+    }
+
     try {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch(`${API_BASE}/api/uploads`, { method: 'POST', body: form, credentials: 'include' });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || 'Failed to upload image. Please try again later.');
+      if (file.size <= SINGLE_UPLOAD_LIMIT) {
+        onProgress?.(0);
+        const result = await uploadSingle(file);
+        onProgress?.(100);
+        return result;
       }
-      const uploaded = (await res.json()) as any;
-      const url = uploaded.url?.startsWith('http') ? uploaded.url : `${API_BASE}${uploaded.url}`;
-      return { url, filename: uploaded.filename || file.name, size: uploaded.size || file.size } as any;
-    } catch (e) {
-      console.error("Storage Error:", e);
-      throw new Error("Failed to upload image. Please try again later.");
+      return await uploadChunked(file, onProgress);
+    } catch (e: any) {
+      console.error('Storage Error:', e);
+      throw new Error(e?.message || 'Не удалось загрузить изображение. Попробуйте ещё раз.');
     }
   },
 
@@ -144,15 +251,14 @@ export const forumService = {
   },
 
   async uploadMyAvatar(file: File): Promise<User> {
-    const form = new FormData();
-    form.append('file', file);
-    const res = await fetch(`${API_BASE}/api/users/me/avatar`, { method: 'POST', body: form, credentials: 'include' });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(text || 'Failed to upload avatar');
-    }
-    const j = (await res.json()) as any;
-    return j.user as User;
+    // Reuse the chunked uploader so large avatars also work on Vercel, then
+    // attach the resulting URL to the profile.
+    const uploaded = await forumService.uploadImage(file);
+    const res = await api<{ user: User }>('/api/users/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ photoURL: uploaded.url }),
+    });
+    return res.user;
   },
 
   // Reporting

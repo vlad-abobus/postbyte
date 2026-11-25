@@ -19,21 +19,53 @@ try:
 except Exception:
     cloudinary = None
 from dotenv import load_dotenv
-from flask import Flask, Response, abort, current_app, jsonify, request, send_from_directory, session
+from flask import (
+    Flask,
+    Response,
+    abort,
+    current_app,
+    jsonify,
+    request,
+    send_from_directory,
+    session,
+    stream_with_context,
+)
 from flask_cors import CORS
 from PIL import Image
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 if __package__:
     # Package import (local dev, gunicorn backend.app:app, Render).
     from .db import db
-    from .models import Board, ImageBlob, IpBan, IpMute, Post, Report, Thread, User
+    from .models import (
+        Board,
+        ImageBlob,
+        IpBan,
+        IpMute,
+        Post,
+        Report,
+        Thread,
+        UploadChunk,
+        UploadSession,
+        User,
+    )
 else:
     # Top-level import (Vercel entrypoint app:app with root=backend/).
     from db import db
-    from models import Board, ImageBlob, IpBan, IpMute, Post, Report, Thread, User
+    from models import (
+        Board,
+        ImageBlob,
+        IpBan,
+        IpMute,
+        Post,
+        Report,
+        Thread,
+        UploadChunk,
+        UploadSession,
+        User,
+    )
 
 
 def create_app() -> Flask:
@@ -41,7 +73,11 @@ def create_app() -> Flask:
 
     app = Flask(__name__)
     app.config["JSON_SORT_KEYS"] = False
-    max_upload_bytes = 5 * 1024 * 1024
+
+    # Vercel Functions reject request bodies above 4.5 MB before Flask runs, so
+    # the per-request limit must stay below that. Bigger images are uploaded in
+    # chunks (see /api/uploads/chunked/*).
+    max_upload_bytes = 4 * 1024 * 1024
     max_upload_bytes_raw = os.getenv("MAX_UPLOAD_BYTES")
     if max_upload_bytes_raw:
         try:
@@ -53,6 +89,36 @@ def create_app() -> Flask:
                 max_upload_bytes,
             )
     app.config["MAX_CONTENT_LENGTH"] = max_upload_bytes
+
+    max_image_bytes = 15 * 1024 * 1024
+    max_image_bytes_raw = os.getenv("MAX_IMAGE_BYTES")
+    if max_image_bytes_raw:
+        try:
+            max_image_bytes = int(max_image_bytes_raw)
+        except ValueError:
+            app.logger.warning(
+                "Invalid MAX_IMAGE_BYTES=%r; using %s bytes",
+                max_image_bytes_raw,
+                max_image_bytes,
+            )
+
+    upload_chunk_bytes = 3 * 1024 * 1024
+    upload_chunk_bytes_raw = os.getenv("UPLOAD_CHUNK_BYTES")
+    if upload_chunk_bytes_raw:
+        try:
+            upload_chunk_bytes = int(upload_chunk_bytes_raw)
+        except ValueError:
+            app.logger.warning(
+                "Invalid UPLOAD_CHUNK_BYTES=%r; using %s bytes",
+                upload_chunk_bytes_raw,
+                upload_chunk_bytes,
+            )
+    # A chunk request includes headers/multipart-free overhead, so leave room
+    # under Flask's per-request limit.
+    if upload_chunk_bytes >= max_upload_bytes:
+        upload_chunk_bytes = max(256 * 1024, max_upload_bytes - 256 * 1024)
+    app.config["MAX_IMAGE_BYTES"] = max_image_bytes
+    app.config["UPLOAD_CHUNK_BYTES"] = upload_chunk_bytes
 
     # A random SECRET_KEY per process breaks sessions on serverless platforms:
     # login succeeds on one instance, but /api/auth/me on another instance
@@ -120,6 +186,8 @@ def create_app() -> Flask:
         f"database_url={'set' if os.getenv('DATABASE_URL') else 'missing'} "
         f"secret_key={secret_key_source} "
         f"max_upload_bytes={app.config['MAX_CONTENT_LENGTH']} "
+        f"max_image_bytes={app.config['MAX_IMAGE_BYTES']} "
+        f"upload_chunk_bytes={app.config['UPLOAD_CHUNK_BYTES']} "
         f"uploads_dir={app.config['UPLOADS_DIR']} "
         f"cloudinary={'on' if app.config['CLOUDINARY_ENABLED'] else 'off'} "
         f"image_storage={'cloudinary' if app.config['CLOUDINARY_ENABLED'] else 'database'} "
@@ -180,6 +248,21 @@ def create_app() -> Flask:
         # Make all /api/* errors return JSON (frontend expects JSON).
         if request.path.startswith("/api/"):
             return jsonify({"error": e.description or e.name, "status": e.code}), e.code
+        return e
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_request_entity_too_large(e: RequestEntityTooLarge):
+        # Flask raises this when MAX_CONTENT_LENGTH is exceeded. On Vercel,
+        # requests above 4.5 MB are rejected before Flask runs, but this covers
+        # the local/Render path and files just above our per-request limit.
+        if request.path.startswith("/api/"):
+            description = (e.description or "").strip()
+            if not description or description == RequestEntityTooLarge.description:
+                limit_mb = max(1, int(app.config["MAX_CONTENT_LENGTH"]) // (1024 * 1024))
+                description = (
+                    f"Request is too large. Maximum is {limit_mb} MB per request."
+                )
+            return jsonify({"error": description, "status": 413}), 413
         return e
 
     @app.after_request
@@ -728,15 +811,131 @@ def create_app() -> Flask:
     def upload_image():
         return jsonify(_handle_image_upload())
 
+    @app.post("/api/uploads/chunked/init")
+    def upload_chunked_init():
+        data = request.get_json(silent=True) or {}
+        filename = str(data.get("filename") or "").strip()
+        content_type = str(data.get("contentType") or "").strip()
+        try:
+            total_size = int(data.get("size"))
+        except (TypeError, ValueError):
+            abort(400, description="size is required")
+
+        ext = Path(filename).suffix.lower()
+        if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+            abort(400, description="Only image uploads are allowed")
+        if total_size <= 0:
+            abort(400, description="size is required")
+        if total_size > current_app.config["MAX_IMAGE_BYTES"]:
+            limit_mb = current_app.config["MAX_IMAGE_BYTES"] // (1024 * 1024)
+            abort(413, description=f"Image is too large. Maximum is {limit_mb} MB.")
+
+        _cleanup_stale_uploads()
+        upload_id = secrets.token_urlsafe(18)
+        db.session.add(
+            UploadSession(
+                id=upload_id,
+                filename=filename[:255],
+                content_type=(content_type or "application/octet-stream")[:100],
+                total_size=total_size,
+            )
+        )
+        db.session.commit()
+        return jsonify(
+            {
+                "uploadId": upload_id,
+                "chunkSize": current_app.config["UPLOAD_CHUNK_BYTES"],
+            }
+        )
+
+    @app.post("/api/uploads/chunked/<upload_id>/<int:index>")
+    def upload_chunk(upload_id: str, index: int):
+        upload = db.session.get(UploadSession, upload_id)
+        if not upload:
+            abort(404, description="Upload session not found")
+
+        chunk_size = current_app.config["UPLOAD_CHUNK_BYTES"]
+        expected_chunks = (upload.total_size + chunk_size - 1) // chunk_size
+        if index < 0 or index >= expected_chunks:
+            abort(400, description="Invalid chunk index")
+
+        raw = request.get_data(cache=False)
+        if not raw:
+            abort(400, description="Empty chunk")
+        expected_len = min(chunk_size, upload.total_size - index * chunk_size)
+        if len(raw) != expected_len:
+            abort(400, description="Invalid chunk size")
+
+        chunk = UploadChunk.query.filter_by(upload_id=upload_id, idx=index).first()
+        if chunk:
+            chunk.data = raw
+            chunk.size = len(raw)
+        else:
+            db.session.add(
+                UploadChunk(upload_id=upload_id, idx=index, data=raw, size=len(raw))
+            )
+        db.session.commit()
+        return jsonify({"ok": True, "index": index, "received": len(raw)})
+
+    @app.post("/api/uploads/chunked/<upload_id>/complete")
+    def upload_chunked_complete(upload_id: str):
+        upload = db.session.get(UploadSession, upload_id)
+        if not upload:
+            abort(404, description="Upload session not found")
+
+        chunks = (
+            UploadChunk.query.filter_by(upload_id=upload_id)
+            .order_by(UploadChunk.idx.asc())
+            .all()
+        )
+        chunk_size = current_app.config["UPLOAD_CHUNK_BYTES"]
+        expected_chunks = (upload.total_size + chunk_size - 1) // chunk_size
+        if len(chunks) != expected_chunks:
+            abort(400, description="Upload is incomplete")
+        if sum(int(chunk.size or 0) for chunk in chunks) != upload.total_size:
+            abort(400, description="Upload is incomplete")
+
+        raw = b"".join(bytes(chunk.data) for chunk in chunks)
+        result = _store_image_bytes(raw, upload.filename, upload.content_type)
+
+        UploadChunk.query.filter_by(upload_id=upload_id).delete(synchronize_session=False)
+        db.session.delete(upload)
+        db.session.commit()
+        return jsonify(result)
+
+    @app.delete("/api/uploads/chunked/<upload_id>")
+    def upload_chunked_cancel(upload_id: str):
+        UploadChunk.query.filter_by(upload_id=upload_id).delete(synchronize_session=False)
+        UploadSession.query.filter_by(id=upload_id).delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({"ok": True})
+
     @app.get("/uploads/<path:filename>")
     def serve_upload(filename: str):
         blob = ImageBlob.query.filter_by(filename=filename).first()
         if blob:
             data = bytes(blob.data)
-            response = Response(data, mimetype=blob.content_type or "application/octet-stream")
-            response.headers["Content-Length"] = str(len(data))
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
-            response.headers["X-Content-Type-Options"] = "nosniff"
+            content_type = blob.content_type or "application/octet-stream"
+            cache_headers = {
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "X-Content-Type-Options": "nosniff",
+            }
+            # Vercel limits non-streamed function responses to 4.5 MB. Large
+            # images are streamed without Content-Length to stay under it.
+            if len(data) <= current_app.config["MAX_CONTENT_LENGTH"]:
+                response = Response(data, mimetype=content_type)
+                response.headers["Content-Length"] = str(len(data))
+                for key, value in cache_headers.items():
+                    response.headers[key] = value
+                return response
+
+            def generate():
+                for offset in range(0, len(data), 256 * 1024):
+                    yield data[offset : offset + 256 * 1024]
+
+            response = Response(stream_with_context(generate()), mimetype=content_type)
+            for key, value in cache_headers.items():
+                response.headers[key] = value
             return response
         # Legacy/local files that still exist on disk (Render disk, local dev).
         return send_from_directory(app.config["UPLOADS_DIR"], filename)
@@ -871,14 +1070,50 @@ def _cleanup_image_blobs(urls) -> None:
         current_app.logger.exception("Failed to clean up unused image blobs")
 
 
+def _cleanup_stale_uploads(max_age_hours: int = 2) -> None:
+    """Drop abandoned chunked uploads so their chunks don't fill the DB."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+    try:
+        stale_ids = [
+            row[0]
+            for row in db.session.query(UploadSession.id)
+            .filter(UploadSession.created_at < cutoff)
+            .all()
+        ]
+        if not stale_ids:
+            return
+        UploadChunk.query.filter(UploadChunk.upload_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        UploadSession.query.filter(UploadSession.id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("Failed to clean up stale upload sessions")
+
+
 def _handle_image_upload() -> dict:
     if "file" not in request.files:
         abort(400, description="file is required")
     file = request.files["file"]
     if not file.filename:
         abort(400, description="file is required")
+    raw = file.read()
+    if not raw:
+        abort(400, description="file is required")
+    return _store_image_bytes(raw, file.filename, file.mimetype)
 
-    original_name = file.filename
+
+def _store_image_bytes(
+    raw: bytes,
+    original_name: str,
+    declared_content_type: str | None = None,
+) -> dict:
+    if not raw:
+        abort(400, description="file is required")
+
     ext = Path(original_name).suffix.lower()
     if ext not in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
         abort(400, description="Only image uploads are allowed")
@@ -887,10 +1122,6 @@ def _handle_image_upload() -> dict:
     safe = secure_filename(original_name) or ""
     if not Path(safe).suffix:
         safe = f"upload{ext}"
-
-    raw = file.read()
-    if not raw:
-        abort(400, description="file is required")
 
     try:
         # verify() checks integrity without decoding the whole image; reopen to
@@ -903,7 +1134,11 @@ def _handle_image_upload() -> dict:
     except Exception:
         abort(400, description="Invalid image")
 
-    content_type = _IMAGE_CONTENT_TYPES.get(image_format) or file.mimetype or "application/octet-stream"
+    content_type = (
+        _IMAGE_CONTENT_TYPES.get(image_format)
+        or declared_content_type
+        or "application/octet-stream"
+    )
     stored_ext = _IMAGE_EXTENSIONS.get(image_format, ext)
 
     if current_app.config.get("CLOUDINARY_ENABLED"):

@@ -53,7 +53,9 @@ CLOUDINARY_FOLDER=postbytecl
 | `SECRET_KEY` | `python -c "import secrets; print(secrets.token_hex(32))"` | да |
 | `DATABASE_URL` | pooled URL из Neon | да |
 | `UPLOADS_DIR` | `/tmp/uploads` | нет, но рекомендуется |
-| `MAX_UPLOAD_BYTES` | `4000000` | да |
+| `MAX_UPLOAD_BYTES` | `4194304` (4 МБ на один запрос) | да |
+| `MAX_IMAGE_BYTES` | `15728640` (15 МБ на картинку) | нет |
+| `UPLOAD_CHUNK_BYTES` | `3145728` (3 МБ на часть) | нет |
 | `CORS_ORIGINS` | `https://<production-домен>` | да |
 | `SESSION_COOKIE_SAMESITE` | `Lax` | да |
 | `SESSION_COOKIE_SECURE` | `true` | да |
@@ -69,7 +71,9 @@ CLOUDINARY_FOLDER=postbytecl
 
 - `SECRET_KEY` должен быть фиксированным. Иначе капча и логин будут случайно ломаться между инстансами.
 - `UPLOADS_DIR=/tmp/uploads` не даёт приложению упасть на read-only filesystem, но сами файлы оттуда не являются постоянным хранилищем.
-- `MAX_UPLOAD_BYTES` меньше лимита Vercel в 4.5 MB.
+- `MAX_UPLOAD_BYTES` должен быть меньше лимита Vercel в 4.5 MB на один запрос. Файлы больше ~3.5 MB фронтенд загружает частями по `UPLOAD_CHUNK_BYTES`, поэтому итоговый размер картинки ограничен `MAX_IMAGE_BYTES` (по умолчанию 15 MB), а не 4.5 MB.
+- GIF поддерживается: файл сохраняется в исходном виде, анимация не пропадает. Ограничение — `MAX_IMAGE_BYTES`.
+- Картинки больше 4.5 MB отдаются потоково (без `Content-Length`), чтобы обойти лимит ответа Vercel.
 - В Neon учитывай лимит хранилища: картинки в PostgreSQL занимают место в базе. Для большого форума лучше включить Cloudinary.
 - `CORS_ORIGINS` — точный origin без слэша на конце. При кастомном домене перечисли оба через запятую.
 - `VITE_ADMIN_KEY` попадает в публичный JS-бандл. Для админки используй роль пользователя в БД.
@@ -106,6 +110,9 @@ GET /rules                   -> страница открывается (SPA fal
 GET /api/captcha             -> captchaId + image
 POST /api/auth/register      -> регистрация, cookie session
 POST /api/uploads            -> /uploads/... (или res.cloudinary.com, если включён Cloudinary)
+POST /api/uploads/chunked/init
+POST /api/uploads/chunked/<id>/<index>
+POST /api/uploads/chunked/<id>/complete  -> /uploads/... (для файлов больше ~3.5 MB)
 GET  /uploads/...            -> 200, картинка из PostgreSQL
 ```
 
@@ -142,7 +149,7 @@ UPDATE users SET role = 'admin' WHERE username = 'твой_username';
 | `Read-only file system` | `UPLOADS_DIR=/tmp/uploads` |
 | `ModuleNotFoundError: flask` | Сервис `api` должен иметь `root: "backend/"` и `backend/requirements.txt` |
 | `ModuleNotFoundError: backend` | При `root: "backend/"` entrypoint — `app:app` |
-| 413 при загрузке | Уменьшить `MAX_UPLOAD_BYTES`, сжать картинку |
+| 413 при загрузке | Файл больше лимита Vercel 4.5 MB на запрос. Обнови фронтенд: большие файлы должны идти через `/api/uploads/chunked/*`. Проверь `MAX_UPLOAD_BYTES` и `MAX_IMAGE_BYTES`. |
 | `FUNCTION_INVOCATION_FAILED` | Смотреть Runtime Logs; чаще всего нет `DATABASE_URL` или неверный `MAX_UPLOAD_BYTES` |
 | Картинки исчезают после redeploy | Проверить, что задеплоена версия с таблицей `image_blobs`; старые файлы из `/tmp` не восстанавливаются |
 | `Image storage failed` | Проверить подключение к Neon и свободное место в базе |

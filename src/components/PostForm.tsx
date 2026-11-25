@@ -22,6 +22,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
   const [userCaptcha, setUserCaptcha] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const captchaCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Simple static captcha for this demo
@@ -120,7 +121,9 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
     try {
       let imageObj = null;
       if (file) {
-        imageObj = await forumService.uploadImage(file);
+        setUploadProgress(0);
+        imageObj = await forumService.uploadImage(file, setUploadProgress);
+        setUploadProgress(null);
       }
 
       let authorName = '';
@@ -145,6 +148,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
       setError(e.message || 'Не удалось отправить сообщение');
     } finally {
       setSubmitting(false);
+      setUploadProgress(null);
     }
   };
 
@@ -238,12 +242,17 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
 
         <div className="flex">
           <label className="w-20 font-bold bg-[var(--color-accent)] text-white p-1 mr-1">Файл</label>
-          <input 
-            type="file" 
-            onChange={e => setFile(e.target.files ? e.target.files[0] : null)} 
-            className="flex-1 bg-white border border-[var(--color-border)] p-1 outline-none"
-            accept="image/*"
-          />
+          <div className="flex-1">
+            <input 
+              type="file" 
+              onChange={e => setFile(e.target.files ? e.target.files[0] : null)} 
+              className="w-full bg-white border border-[var(--color-border)] p-1 outline-none"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+            />
+            <div className="text-[10px] text-[var(--color-muted)] mt-1">
+              PNG, JPG, GIF, WebP до 15 МБ. Большие файлы загружаются частями.
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -265,7 +274,11 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
             disabled={submitting}
             className="bg-[var(--color-accent)] text-white font-bold p-1 px-4 cursor-pointer hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
           >
-            {submitting ? '...' : 'Отправить'}
+            {submitting
+              ? uploadProgress !== null
+                ? `Загрузка ${uploadProgress}%`
+                : 'Отправка...'
+              : 'Отправить'}
           </button>
         </div>
 

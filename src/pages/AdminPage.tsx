@@ -5,7 +5,7 @@ import { IpAction, Post, Report, User } from '../types';
 import { formatDate, isGifImage } from '../lib/utils';
 import { LoadingState } from '../components/LoadingState';
 import { useAuth } from '../lib/auth';
-import { Trash2 } from 'lucide-react';
+import { CheckCircle2, Flag, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react';
 
 export function AdminPage() {
   const { authLoading, isStaff } = useAuth();
@@ -14,9 +14,11 @@ export function AdminPage() {
   const [actions, setActions] = useState<IpAction[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [showResolvedReports, setShowResolvedReports] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [updatingReportId, setUpdatingReportId] = useState<string | null>(null);
   const [form, setForm] = useState({ type: 'ban' as 'ban' | 'mute', ip: '', reason: '', durationHours: '' });
   const [clearIp, setClearIp] = useState('');
   const [clearType, setClearType] = useState<'all' | 'ban' | 'mute'>('all');
@@ -84,6 +86,24 @@ export function AdminPage() {
     }
   };
 
+  const resolveReport = async (reportId: string, status: 'resolved' | 'pending' = 'resolved') => {
+    setUpdatingReportId(reportId);
+    setError('');
+    try {
+      await forumService.resolveReport(reportId, status);
+      await loadAll();
+    } catch (e: any) {
+      setError(e?.message || 'Не удалось обновить статус жалобы');
+    } finally {
+      setUpdatingReportId(null);
+    }
+  };
+
+  const prefillIpAction = (type: 'ban' | 'mute', ip: string, reason: string) => {
+    setForm((prev) => ({ ...prev, type, ip, reason }));
+    document.getElementById('ip-moderation-section')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const createAction = async () => {
     setSaving(true);
     setError('');
@@ -134,7 +154,7 @@ export function AdminPage() {
     return (
       <LoadingState
         title="Загрузка админ-панели"
-        subtitle="Получаем пользователей, посты и настройки..."
+        subtitle="Получаем жалобы, пользователей, посты и настройки..."
         variant="admin"
       />
     );
@@ -142,42 +162,218 @@ export function AdminPage() {
   if (!isStaff) return <Navigate to="/" replace />;
 
   const pendingReports = reports.filter((r) => r.status === 'pending');
+  const resolvedReports = reports.filter((r) => r.status === 'resolved');
+  const displayedReports = showResolvedReports ? resolvedReports : pendingReports;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">
-      <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
-        <h1 className="font-bold text-lg">Админ-панель</h1>
-        <p className="text-xs opacity-70">Управление аккаунтами, ролями, модерация любых постов, IP-муты и баны.</p>
+      <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h1 className="font-bold text-lg">Админ-панель</h1>
+          <p className="text-xs opacity-70">Жалобы на сообщения, управление аккаунтами, модерация любых постов, IP-муты и баны.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadAll()}
+          className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1 text-xs self-start sm:self-center"
+        >
+          <RefreshCw size={12} />
+          Обновить данные
+        </button>
       </div>
 
       {error && <div className="p-2 text-xs border border-[var(--color-danger-border)] bg-[var(--color-danger-bg)]">{error}</div>}
 
-      {/* Pending Reports */}
-      {pendingReports.length > 0 && (
-        <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
-          <h2 className="font-bold mb-2">Жалобы ({pendingReports.length})</h2>
-          <div className="space-y-2">
-            {pendingReports.map((r) => (
-              <div key={r.id} className="border border-[var(--color-border)] bg-white/60 p-2 text-xs flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
-                <Link to={`/${r.boardId}/thread/${r.threadId}`} className="post-link font-mono font-bold">
-                  /{r.boardId}/ #{r.threadId} → пост #{r.postId}
-                </Link>
-                <span className="flex-1">{r.reason}</span>
-                <span className="opacity-70">{formatDate(r.createdAt)}</span>
-                <button
-                  type="button"
-                  disabled={deletingPostId === r.postId}
-                  onClick={() => deleteAnyPost(r.boardId, r.threadId, r.postId)}
-                  className="post-link text-red-700 hover:text-red-900 bg-transparent border-none p-0 inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                >
-                  <Trash2 size={11} />
-                  Удалить пост
-                </button>
-              </div>
-            ))}
+      {/* Reported Messages Inbox for Moderators / Admins */}
+      <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 className="font-bold inline-flex items-center gap-1.5">
+            <Flag size={14} className="text-orange-700" />
+            <span>Жалобы на сообщения</span>
+            {pendingReports.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] bg-orange-700 text-white font-bold rounded-sm">
+                {pendingReports.length} новых
+              </span>
+            )}
+          </h2>
+          <div className="flex gap-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowResolvedReports(false)}
+              className={`px-2 py-0.5 border cursor-pointer ${
+                !showResolvedReports
+                  ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] font-bold'
+                  : 'bg-white border-[var(--color-border)] text-[var(--color-post-header)]'
+              }`}
+            >
+              Новые ({pendingReports.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowResolvedReports(true)}
+              className={`px-2 py-0.5 border cursor-pointer ${
+                showResolvedReports
+                  ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] font-bold'
+                  : 'bg-white border-[var(--color-border)] text-[var(--color-post-header)]'
+              }`}
+            >
+              Решённые ({resolvedReports.length})
+            </button>
           </div>
         </div>
-      )}
+
+        {displayedReports.length === 0 ? (
+          <div className="text-xs opacity-60 py-2">
+            {showResolvedReports ? 'Архив решённых жалоб пуст.' : 'Новых жалоб пока нет.'}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {displayedReports.map((r) => {
+              const reportedPost = r.post;
+              const gif = isGifImage(reportedPost?.image?.url, reportedPost?.image?.filename);
+              return (
+                <div
+                  key={r.id}
+                  className={`border p-3 text-xs space-y-2 ${
+                    r.status === 'pending'
+                      ? 'border-orange-700/60 bg-white/80'
+                      : 'border-[var(--color-border)] bg-white/50 opacity-80'
+                  }`}
+                >
+                  {/* Report metadata header */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)]/60 pb-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`px-1.5 py-0.5 text-[9px] font-bold uppercase text-white ${
+                          r.status === 'pending' ? 'bg-orange-700' : 'bg-[var(--color-muted)]'
+                        }`}
+                      >
+                        {r.status === 'pending' ? 'Новая жалоба' : 'Решена'}
+                      </span>
+                      <Link to={`/${r.boardId}/thread/${r.threadId}`} className="post-link font-mono font-bold">
+                        /{r.boardId}/ thread #{r.threadId} → пост #{r.postId}
+                      </Link>
+                      {reportedPost?.isOp && (
+                        <span className="px-1 py-0.5 text-[9px] bg-[var(--color-accent)] text-white font-bold uppercase">
+                          OP
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] opacity-70">{formatDate(r.createdAt)}</span>
+                  </div>
+
+                  {/* Report reason */}
+                  <div className="bg-[var(--color-danger-bg)]/60 border border-[var(--color-danger-border)]/40 px-2 py-1">
+                    <span className="font-bold text-[var(--color-danger-border)]">Причина: </span>
+                    <span>{r.reason}</span>
+                  </div>
+
+                  {/* Reported message body */}
+                  {reportedPost ? (
+                    <div className="bg-[var(--color-reply-bg)] border border-[var(--color-reply-border)] p-2 space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className="font-bold text-[var(--color-post-header)]">
+                          {reportedPost.authorUid ? (
+                            <Link to={`/profile/${reportedPost.authorUid}`} className="post-link font-bold">
+                              {reportedPost.authorName || 'Аноним'}
+                            </Link>
+                          ) : (
+                            reportedPost.authorName || 'Аноним'
+                          )}
+                        </span>
+                        <span className="opacity-70">{formatDate(reportedPost.createdAt)}</span>
+                        {reportedPost.ip && (
+                          <span className="font-mono text-[10px] px-1 bg-white/80 border border-[var(--color-border)]">
+                            IP: {reportedPost.ip}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        {reportedPost.image?.url && (
+                          <a
+                            href={reportedPost.image.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="relative shrink-0 inline-block self-start"
+                          >
+                            <img
+                              src={reportedPost.image.url}
+                              alt={reportedPost.image.filename || 'media'}
+                              referrerPolicy="no-referrer"
+                              className="max-w-[140px] max-h-[120px] border border-[var(--color-border)] bg-white object-contain"
+                            />
+                            {gif && <span className="gif-badge">GIF</span>}
+                          </a>
+                        )}
+                        <div className="flex-1 whitespace-pre-wrap break-words">
+                          {reportedPost.content || <span className="italic opacity-60">(без текста)</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="italic opacity-60 text-[11px]">
+                      Сообщение #{r.postId} уже удалено.
+                    </div>
+                  )}
+
+                  {/* Moderator actions */}
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    {reportedPost && (
+                      <button
+                        type="button"
+                        disabled={deletingPostId === r.postId}
+                        onClick={() => deleteAnyPost(r.boardId, r.threadId, r.postId, reportedPost.isOp)}
+                        className="px-2.5 py-1 bg-red-700 text-white font-bold border border-red-800 inline-flex items-center gap-1 cursor-pointer hover:bg-red-800 disabled:opacity-50"
+                      >
+                        <Trash2 size={11} />
+                        {deletingPostId === r.postId
+                          ? 'Удаление...'
+                          : reportedPost.isOp
+                            ? 'Удалить тред'
+                            : 'Удалить сообщение'}
+                      </button>
+                    )}
+
+                    {r.status === 'pending' && (
+                      <button
+                        type="button"
+                        disabled={updatingReportId === r.id}
+                        onClick={() => resolveReport(r.id, 'resolved')}
+                        className="px-2.5 py-1 bg-white border border-[var(--color-border)] text-[var(--color-post-header)] font-bold inline-flex items-center gap-1 cursor-pointer hover:bg-[var(--color-post-highlight)] disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={11} />
+                        {updatingReportId === r.id ? 'Сохраняем...' : 'Отклонить жалобу'}
+                      </button>
+                    )}
+
+                    {reportedPost?.ip && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => prefillIpAction('mute', reportedPost.ip!, `По жалобе #${r.id}: ${r.reason}`)}
+                          className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1 text-[11px]"
+                        >
+                          <ShieldAlert size={11} />
+                          Замутить IP
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => prefillIpAction('ban', reportedPost.ip!, `По жалобе #${r.id}: ${r.reason}`)}
+                          className="post-link text-red-700 bg-transparent border-none p-0 inline-flex items-center gap-1 text-[11px]"
+                        >
+                          <ShieldAlert size={11} />
+                          Забанить IP
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Recent Posts Moderation */}
       <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
@@ -285,7 +481,7 @@ export function AdminPage() {
       </div>
 
       {/* IP Bans / Mutes */}
-      <div className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
+      <div id="ip-moderation-section" className="bg-[var(--color-post-bg)] border border-[var(--color-border)] p-3">
         <h2 className="font-bold mb-2">IP-мут / бан</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <select

@@ -280,6 +280,16 @@ export const forumService = {
     });
   },
 
+  async resolveReport(reportId: string, status: 'resolved' | 'pending' = 'resolved'): Promise<Report> {
+    const adminKey = (import.meta as any).env?.VITE_ADMIN_KEY;
+    const res = await api<{ report: Report }>(`/api/reports/${encodeURIComponent(reportId)}`, {
+      method: 'PATCH',
+      headers: adminKey ? { 'X-Admin-Key': adminKey } : {},
+      body: JSON.stringify({ status }),
+    });
+    return res.report;
+  },
+
   async adminListUsers(): Promise<User[]> {
     return await api<User[]>('/api/admin/users');
   },

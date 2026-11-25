@@ -1,10 +1,19 @@
 import ReactMarkdown from 'react-markdown';
 import { Post } from '../types';
 import { formatDate, isGifImage } from '../lib/utils';
-import { MessageSquare, Flag, Shield, Trash2 } from 'lucide-react';
+import { MessageSquare, Flag, Shield, Trash2, Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { forumService } from '../services/forumService';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../lib/auth';
+
+const REPORT_PRESETS = [
+  'Спам / флуд',
+  'Оскорбления / травля',
+  'NSFW / 18+ контент',
+  'Нарушение правил доски',
+  'Другое',
+];
 
 interface PostItemProps {
   post: Post;
@@ -18,20 +27,23 @@ interface PostItemProps {
 }
 
 export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, hideActions, canDelete }: PostItemProps) {
-  const [reporting, setReporting] = useState(false);
+  const { user: me } = useAuth();
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reported, setReported] = useState(false);
   const [modalImage, setModalImage] = useState<{ url: string; filename: string; isGif: boolean } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (!modalImage) return;
+    if (!modalImage && !showReportModal) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setModalImage(null);
+        setShowReportModal(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [modalImage]);
+  }, [modalImage, showReportModal]);
 
   const handleDelete = async () => {
     if (!boardId || !threadId) return;
@@ -51,21 +63,6 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
     }
   };
 
-  const handleReport = async () => {
-    const reason = window.prompt('Почему вы жалуетесь на этот пост?');
-    if (reason && boardId && threadId) {
-      setReporting(true);
-      try {
-        await forumService.reportPost(boardId, threadId, post.id, reason);
-        alert('Жалоба отправлена.');
-      } catch (e: any) {
-        alert(e?.message || 'Не удалось отправить жалобу');
-      } finally {
-        setReporting(false);
-      }
-    }
-  };
-
   const handleQuote = () => {
     const textarea = document.querySelector('textarea');
     if (textarea) {
@@ -77,6 +74,8 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
   };
 
   const isStaff = post.authorRole === 'admin' || post.authorRole === 'moderator';
+  const isOwnPost = Boolean(me?.uid && post.authorUid && me.uid === post.authorUid);
+  const canReport = Boolean(boardId && threadId && !isOwnPost);
   const attachmentIsGif = isGifImage(post.image?.url, post.image?.filename);
 
   return (
@@ -108,20 +107,27 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
               ID: <span className="font-mono">{post.id.slice(0, 8)}</span>
             </span>
             {!hideActions && !isPreview && (
-              <>
-                <button onClick={handleQuote} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer">
-                  <MessageSquare size={10} />
-                  Цитата
-                </button>
+              <button onClick={handleQuote} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer">
+                <MessageSquare size={10} />
+                Цитата
+              </button>
+            )}
+            {canReport && (
+              reported ? (
+                <span className="text-[var(--color-accent)] font-bold inline-flex items-center gap-0.5 text-[11px]">
+                  <Check size={10} />
+                  Репорт отправлен
+                </span>
+              ) : (
                 <button
-                  onClick={handleReport}
-                  disabled={reporting}
-                  className="post-link text-orange-700 bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  onClick={() => setShowReportModal(true)}
+                  className="post-link text-orange-700 bg-transparent border-none p-0 inline-flex items-center gap-0.5 cursor-pointer"
                 >
                   <Flag size={10} />
                   Жалоба
                 </button>
-              </>
+              )
             )}
             {canDelete && boardId && threadId && (
               <button
@@ -205,6 +211,18 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
           </div>
         </div>
       </div>
+      {showReportModal && boardId && threadId && (
+        <ReportModal
+          post={post}
+          boardId={boardId}
+          threadId={threadId}
+          onClose={() => setShowReportModal(false)}
+          onSubmitted={() => {
+            setReported(true);
+            setShowReportModal(false);
+          }}
+        />
+      )}
       {modalImage && (
         <ImageModal
           imageUrl={modalImage.url}
@@ -214,6 +232,141 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
         />
       )}
     </>
+  );
+}
+
+function ReportModal({
+  post,
+  boardId,
+  threadId,
+  onClose,
+  onSubmitted,
+}: {
+  post: Post;
+  boardId: string;
+  threadId: string;
+  onClose: () => void;
+  onSubmitted: () => void;
+}) {
+  const [preset, setPreset] = useState<string>(REPORT_PRESETS[0]);
+  const [details, setDetails] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    const reason =
+      preset === 'Другое'
+        ? details.trim()
+        : details.trim()
+          ? `${preset}: ${details.trim()}`
+          : preset;
+    if (!reason) {
+      setError('Укажите причину жалобы.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await forumService.reportPost(boardId, threadId, post.id, reason);
+      onSubmitted();
+    } catch (err: any) {
+      setError(err?.message || 'Не удалось отправить жалобу');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/55 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md bg-[var(--color-post-bg)] border border-[var(--color-border)] shadow-md text-xs"
+      >
+        <div className="bg-[var(--color-accent)] text-white font-bold px-3 py-1.5 flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5">
+            <Flag size={12} />
+            Пожаловаться на сообщение #{post.id}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="bg-transparent border-none text-white cursor-pointer p-0"
+            aria-label="Закрыть"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="p-3 space-y-3">
+          <div className="bg-[var(--color-reply-bg)] border border-[var(--color-reply-border)] p-2 space-y-1">
+            <div className="text-[10px] text-[var(--color-muted)]">
+              Сообщение от <strong className="text-[var(--color-post-header)]">{post.authorName || 'Аноним'}</strong> будет отправлено модератору в админ-панель:
+            </div>
+            <div className="text-xs line-clamp-3 break-words">
+              {post.content || (post.image?.url ? `[Вложение: ${post.image.filename || 'медиа'}]` : '(пустое сообщение)')}
+            </div>
+          </div>
+
+          <div>
+            <div className="font-bold mb-1.5 text-[var(--color-post-header)]">Причина жалобы</div>
+            <div className="flex flex-wrap gap-1.5">
+              {REPORT_PRESETS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setPreset(item)}
+                  className={`px-2 py-1 text-[11px] border cursor-pointer ${
+                    preset === item
+                      ? 'bg-[var(--color-accent)] text-white border-[var(--color-accent)] font-bold'
+                      : 'bg-white text-[var(--color-post-header)] border-[var(--color-border)] hover:bg-[var(--color-post-highlight)]'
+                  }`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block font-bold mb-1 text-[var(--color-post-header)]">
+              Комментарий модератору {preset === 'Другое' ? '(обязательно)' : '(необязательно)'}
+            </label>
+            <textarea
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              maxLength={400}
+              placeholder="Опишите нарушение подробнее..."
+              className="w-full bg-white border border-[var(--color-border)] p-1.5 h-20 outline-none resize-none"
+            />
+          </div>
+
+          {error && <div className="text-red-700 font-bold">{error}</div>}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1 bg-white border border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-post-highlight)]"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-3 py-1 bg-orange-700 text-white font-bold border border-orange-800 cursor-pointer hover:bg-orange-800 disabled:opacity-50"
+            >
+              {submitting ? 'Отправка...' : 'Отправить модератору'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
 

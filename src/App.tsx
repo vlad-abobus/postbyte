@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { Home } from './pages/Home';
 import { BoardPage } from './pages/BoardPage';
@@ -10,9 +11,35 @@ import { Register } from './pages/Register';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 import { AuthProvider, useAuth } from './lib/auth';
+import { forumService } from './services/forumService';
 
 function AppShell() {
   const { user, authLoading, isStaff, logout } = useAuth();
+  const [pendingReportsCount, setPendingReportsCount] = useState(0);
+
+  useEffect(() => {
+    if (!isStaff) {
+      setPendingReportsCount(0);
+      return;
+    }
+    let active = true;
+    const loadPending = () => {
+      forumService
+        .getReports()
+        .then((reports) => {
+          if (active) {
+            setPendingReportsCount(reports.filter((r) => r.status === 'pending').length);
+          }
+        })
+        .catch(() => {});
+    };
+    loadPending();
+    const interval = window.setInterval(loadPending, 45000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [isStaff]);
 
   return (
     <BrowserRouter>
@@ -20,7 +47,7 @@ function AppShell() {
         {/* Navigation Bar */}
         <header className="sticky top-0 z-40 bg-[var(--color-post-bg)]/95 backdrop-blur-[1px] border-b border-[var(--color-border)] px-3 md:px-4 py-1 text-xs flex flex-col sm:flex-row justify-between sm:items-center gap-1">
           <div className="flex gap-3 md:gap-4 flex-wrap">
-            <Link to="/" className="post-link font-bold">AnyWhere</Link>
+            <Link to="/" className="post-link font-bold">PostByte</Link>
             <Link to="/" className="post-link">Доски</Link>
             <Link to="/rules" className="post-link">Правила</Link>
             <Link to="/about" className="post-link">О проекте</Link>
@@ -41,7 +68,12 @@ function AppShell() {
                 {isStaff && (
                   <Link to="/admin" className="post-link inline-flex items-center gap-1">
                     <Shield size={12} />
-                    Админ-панель
+                    <span>Админ-панель</span>
+                    {pendingReportsCount > 0 && (
+                      <span className="px-1 py-0.5 text-[9px] leading-none bg-orange-700 text-white font-bold rounded-sm no-underline">
+                        {pendingReportsCount}
+                      </span>
+                    )}
                   </Link>
                 )}
                 <button onClick={logout} className="post-link bg-transparent border-none p-0 inline-flex items-center gap-1">
@@ -79,7 +111,7 @@ function AppShell() {
         </main>
 
         <footer className="text-center py-8 text-[10px] text-[var(--color-muted)] border-top border-[var(--color-border)] mt-8">
-          <p>Это AnyWhere</p>
+          <p>Это PostByte</p>
           <p>2026</p>
         </footer>
       </div>

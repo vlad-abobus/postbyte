@@ -78,4 +78,5 @@ export interface Report {
   reason: string;
   createdAt: any;
   status: 'pending' | 'resolved';
+  post?: Post | null;
 }

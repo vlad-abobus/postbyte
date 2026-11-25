@@ -272,7 +272,10 @@ def create_app() -> Flask:
     def disable_cache_for_auth(response):
         # Auth state depends on the session cookie. Never let a browser or edge
         # cache reuse a stale {"user": null} response after login.
-        if request.path.startswith(("/api/auth/", "/api/admin/")) or request.path == "/api/captcha":
+        if (
+            request.path.startswith(("/api/auth/", "/api/admin/", "/api/reports"))
+            or request.path == "/api/captcha"
+        ):
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -764,32 +767,78 @@ def create_app() -> Flask:
     @app.post("/api/reports")
     def create_report():
         _enforce_ip_restrictions(_client_ip(), for_posting=False)
+        _rate_limit("report_post", 5)
         data = request.get_json(silent=True) or {}
         board_id = (data.get("boardId") or "").strip()
         thread_id = str(data.get("threadId") or "").strip()
         post_id = str(data.get("postId") or "").strip()
-        reason = (data.get("reason") or "").strip()
+        reason = (data.get("reason") or "").strip()[:500]
 
         if not (board_id and thread_id and post_id and reason):
             abort(400, description="boardId, threadId, postId, reason are required")
 
-        _require_thread(board_id, thread_id)
+        t = _require_thread(board_id, thread_id)
+        try:
+            post_id_int = int(post_id)
+        except (TypeError, ValueError):
+            abort(404, description="Post not found")
+
+        p = Post.query.filter_by(board_id=board_id, thread_id=t.id, id=post_id_int).first()
+        if not p:
+            abort(404, description="Post not found")
+
+        actor = _current_user()
+        if actor and p.author_user_id and actor.id == p.author_user_id:
+            abort(400, description="Нельзя пожаловаться на собственное сообщение")
+
         r = Report(
             board_id=board_id,
-            thread_id=int(thread_id),
-            post_id=int(post_id),
+            thread_id=t.id,
+            post_id=p.id,
             reason=reason,
             status="pending",
         )
         db.session.add(r)
         db.session.commit()
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "id": str(r.id)})
 
     @app.get("/api/reports")
     def list_reports():
         _require_admin_access()
-        reports = Report.query.order_by(Report.created_at.desc()).all()
-        return jsonify([r.to_dict() for r in reports])
+        reports = Report.query.order_by(Report.created_at.desc()).limit(200).all()
+        post_ids = {r.post_id for r in reports}
+        posts_by_id = (
+            {p.id: p.to_dict() for p in Post.query.filter(Post.id.in_(post_ids)).all()}
+            if post_ids
+            else {}
+        )
+        items = []
+        for r in reports:
+            item = r.to_dict()
+            item["post"] = posts_by_id.get(r.post_id)
+            items.append(item)
+        return jsonify(items)
+
+    @app.patch("/api/reports/<report_id>")
+    def update_report_status(report_id: str):
+        _require_admin_access()
+        try:
+            report_id_int = int(report_id)
+        except (TypeError, ValueError):
+            abort(404, description="Report not found")
+        r = Report.query.get(report_id_int)
+        if not r:
+            abort(404, description="Report not found")
+        data = request.get_json(silent=True) or {}
+        status = str(data.get("status") or "resolved").strip().lower()
+        if status not in {"pending", "resolved"}:
+            abort(400, description="status must be pending or resolved")
+        r.status = status
+        db.session.commit()
+        item = r.to_dict()
+        p = Post.query.get(r.post_id)
+        item["post"] = p.to_dict() if p else None
+        return jsonify({"report": item})
 
     @app.delete("/api/boards/<board_id>/threads/<thread_id>/posts/<post_id>")
     def delete_post(board_id: str, thread_id: str, post_id: str):
@@ -864,7 +913,7 @@ def create_app() -> Flask:
         max_bytes = min(current_app.config["MAX_CONTENT_LENGTH"], 4 * 1024 * 1024)
         req = UrlRequest(
             raw_url,
-            headers={"User-Agent": "AnyWhere-NSFW-Proxy/1.0", "Accept": "image/*,*/*;q=0.5"},
+            headers={"User-Agent": "PostByte-NSFW-Proxy/1.0", "Accept": "image/*,*/*;q=0.5"},
         )
         try:
             with urlopen(req, timeout=8) as upstream:

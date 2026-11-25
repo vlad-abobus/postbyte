@@ -34,7 +34,7 @@ export function LoadingState({
         <div className="bg-[var(--color-accent)] text-white px-3 py-1.5 flex items-center justify-between text-xs font-bold">
           <span className="flex items-center gap-2">
             <span className="loader-dot" aria-hidden="true" />
-            <span>AnyWhere</span>
+            <span>PostByte</span>
           </span>
           <span className="font-mono text-[10px] opacity-85">
             {elapsedSec > 0 ? `${elapsedSec}s` : 'SYNC'}

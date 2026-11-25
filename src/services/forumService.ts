@@ -8,6 +8,15 @@ export function getMediaProxyUrl(url: string): string {
   return `${API_BASE}/api/media-proxy?url=${encodeURIComponent(url)}`;
 }
 
+export function resolveMediaUrl(url?: string | null): string {
+  const trimmed = (url || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('/uploads/')) {
+    return `${API_BASE}${trimmed}`;
+  }
+  return trimmed;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});
   const hasJsonBody = typeof init?.body === 'string';

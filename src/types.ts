@@ -33,10 +33,12 @@ export interface Thread {
 export interface Post {
   id: string;
   threadId: string;
+  threadTitle?: string;
   boardId: string;
   authorName: string;
   authorUid?: string; // Link to user profile if logged in
   authorRole?: string;
+  authorPhotoURL?: string | null;
   content: string;
   createdAt: any;
   image?: {

@@ -3,7 +3,7 @@ import { Post } from '../types';
 import { formatDate, isGifImage } from '../lib/utils';
 import { MessageSquare, Flag, Shield, Trash2, Check, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { forumService } from '../services/forumService';
+import { forumService, resolveMediaUrl } from '../services/forumService';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 
@@ -18,6 +18,7 @@ const REPORT_PRESETS = [
 interface PostItemProps {
   post: Post;
   isOp?: boolean;
+  threadTitle?: string;
   boardId?: string;
   threadId?: string;
   onDelete?: (info: { postId: string; deletedThread: boolean }) => void;
@@ -26,12 +27,17 @@ interface PostItemProps {
   canDelete?: boolean;
 }
 
-export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, hideActions, canDelete }: PostItemProps) {
+export function PostItem({ post, isOp, threadTitle, boardId, threadId, onDelete, isPreview, hideActions, canDelete }: PostItemProps) {
   const { user: me } = useAuth();
   const [showReportModal, setShowReportModal] = useState(false);
   const [reported, setReported] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [modalImage, setModalImage] = useState<{ url: string; filename: string; isGif: boolean } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setAvatarFailed(false);
+  }, [post.authorPhotoURL]);
 
   useEffect(() => {
     if (!modalImage && !showReportModal) return;
@@ -76,17 +82,47 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
   const isStaff = post.authorRole === 'admin' || post.authorRole === 'moderator';
   const isOwnPost = Boolean(me?.uid && post.authorUid && me.uid === post.authorUid);
   const canReport = Boolean(boardId && threadId && !isOwnPost);
-  const attachmentIsGif = isGifImage(post.image?.url, post.image?.filename);
+  const resolvedImageUrl = resolveMediaUrl(post.image?.url);
+  const resolvedAvatarUrl = post.authorUid ? resolveMediaUrl(post.authorPhotoURL) : '';
+  const attachmentIsGif = isGifImage(resolvedImageUrl, post.image?.filename);
+  const displayTitle = isOp ? (threadTitle ?? post.threadTitle ?? '').trim() : '';
 
   return (
     <>
       <div className={isOp ? 'op-post' : 'post'}>
         <div className="flex flex-col gap-1">
+          {/* Thread Subject / Title on OP Post */}
+          {displayTitle && (
+            <div className="mb-0.5">
+              {isPreview && boardId && threadId ? (
+                <Link
+                  to={`/${boardId}/thread/${threadId}`}
+                  className="text-base font-bold text-[var(--color-post-header)] hover:text-[var(--color-link-hover)] hover:underline break-words"
+                >
+                  {displayTitle}
+                </Link>
+              ) : (
+                <h2 className="text-lg font-bold text-[var(--color-post-header)] leading-snug break-words">
+                  {displayTitle}
+                </h2>
+              )}
+            </div>
+          )}
+
           {/* Header */}
           <div className={`flex items-center gap-2 text-xs flex-wrap ${isOp ? 'op-header' : ''}`}>
             {post.authorUid ? (
-              <Link to={`/profile/${post.authorUid}`} className="font-bold text-[var(--color-post-header)] inline-flex items-center gap-1 hover:underline">
-                {post.authorName || 'Аноним'}
+              <Link to={`/profile/${post.authorUid}`} className="font-bold text-[var(--color-post-header)] inline-flex items-center gap-1.5 hover:underline">
+                {resolvedAvatarUrl && !avatarFailed && (
+                  <img
+                    src={resolvedAvatarUrl}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarFailed(true)}
+                    className="w-[18px] h-[18px] object-cover border border-[var(--color-border)] bg-white shrink-0"
+                  />
+                )}
+                <span>{post.authorName || 'Аноним'}</span>
                 {isStaff && <Shield size={10} className="text-[var(--color-post-header)]" />}
               </Link>
             ) : (
@@ -144,7 +180,7 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
 
           {/* Content */}
           <div className="flex flex-col md:flex-row gap-4 mt-2">
-            {post.image?.url && (
+            {resolvedImageUrl && post.image && (
               <div className="flex-shrink-0">
                 <div className="text-[10px] text-[var(--color-muted)] mb-1 italic">
                   {attachmentIsGif ? 'GIF' : 'Файл'}: {post.image.filename || (attachmentIsGif ? 'animation.gif' : 'image')}
@@ -155,21 +191,21 @@ export function PostItem({ post, isOp, boardId, threadId, onDelete, isPreview, h
                   className="relative block bg-transparent border-none p-0 cursor-zoom-in"
                   onClick={() =>
                     setModalImage({
-                      url: post.image!.url,
+                      url: resolvedImageUrl,
                       filename: post.image!.filename || (attachmentIsGif ? 'animation.gif' : 'image'),
                       isGif: attachmentIsGif,
                     })
                   }
                 >
                   <img
-                    src={post.image.url}
+                    src={resolvedImageUrl}
                     alt={post.image.filename || 'media'}
                     className="max-w-[200px] max-h-[250px] border border-[var(--color-border)] bg-white"
                     referrerPolicy="no-referrer"
                   />
                   {attachmentIsGif && <span className="gif-badge">GIF</span>}
                 </button>
-                <a href={post.image.url} target="_blank" rel="noreferrer" className="post-link text-[10px] mt-1 inline-block">
+                <a href={resolvedImageUrl} target="_blank" rel="noreferrer" className="post-link text-[10px] mt-1 inline-block">
                   Оригинал
                 </a>
               </div>

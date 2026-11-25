@@ -133,14 +133,20 @@ class Post(db.Model):
 
         author_uid = str(self.author_user_id) if self.author_user_id else None
         author_role = self.author_user.role if self.author_user else None
+        author_photo_url = (
+            (self.author_user.photo_url or "").strip() if self.author_user else ""
+        ) or None
+        thread_title = (self.thread.title or "").strip() if self.thread else ""
 
         return {
             "id": str(self.id),
             "threadId": str(self.thread_id),
+            "threadTitle": thread_title,
             "boardId": self.board_id,
             "authorName": self.author_name,
             "authorUid": author_uid,
             "authorRole": author_role,
+            "authorPhotoURL": author_photo_url,
             "content": self.content,
             "createdAt": _iso_or_now(self.created_at),
             "image": image,

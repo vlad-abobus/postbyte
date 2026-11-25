@@ -131,10 +131,11 @@ function ThreadPreview({
   return (
     <div className="border-b border-dotted border-[var(--color-border)] pb-8 mb-4">
       <div className="flex flex-col md:flex-row gap-4">
-        {opPost && (
+        {opPost ? (
           <PostItem
             post={opPost}
             isOp
+            threadTitle={thread.title}
             boardId={boardId}
             threadId={thread.id}
             canDelete={canDeleteOp}
@@ -142,7 +143,14 @@ function ThreadPreview({
             isPreview
             hideActions
           />
-        )}
+        ) : thread.title ? (
+          <Link
+            to={`/${boardId}/thread/${thread.id}`}
+            className="text-base font-bold text-[var(--color-post-header)] hover:text-[var(--color-link-hover)] hover:underline"
+          >
+            {thread.title}
+          </Link>
+        ) : null}
       </div>
       <div className="mt-2 text-xs opacity-70 ml-2">
         <Link to={`/${boardId}/thread/${thread.id}`} className="post-link font-bold">

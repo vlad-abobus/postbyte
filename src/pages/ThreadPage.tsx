@@ -63,12 +63,17 @@ export function ThreadPage() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-4 flex justify-between items-center bg-[var(--color-post-bg)] p-1 border border-[var(--color-border)]">
-        <Link to={`/${boardId}`} className="post-link flex items-center gap-1">
+      <div className="mb-4 flex justify-between items-center gap-3 bg-[var(--color-post-bg)] p-1.5 px-2 border border-[var(--color-border)]">
+        <Link to={`/${boardId}`} className="post-link flex items-center gap-1 shrink-0">
           <ArrowLeft size={12} />
           <span>Назад в /{boardId}/</span>
         </Link>
-        <button onClick={fetchData} className="post-link flex items-center gap-1 bg-transparent border-none p-0">
+        {thread.title && (
+          <span className="font-bold text-xs text-[var(--color-post-header)] truncate">
+            {thread.title}
+          </span>
+        )}
+        <button onClick={fetchData} className="post-link flex items-center gap-1 bg-transparent border-none p-0 shrink-0">
           <RefreshCw size={12} />
           <span>Обновить</span>
         </button>
@@ -81,6 +86,7 @@ export function ThreadPage() {
             <PostItem
               post={post}
               isOp={post.isOp}
+              threadTitle={post.isOp ? thread.title : undefined}
               boardId={boardId!}
               threadId={threadId!}
               onDelete={handlePostDeleted}

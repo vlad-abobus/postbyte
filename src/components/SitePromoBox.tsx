@@ -13,7 +13,7 @@ export function SitePromoBox() {
   return (
     <div className="promo-box mb-4">
       <div className="promo-boxbar">
-        <h2>Выставочный режим</h2>
+        <h2>Просто Мику</h2>
         <button
           type="button"
           className="promo-closebutton"

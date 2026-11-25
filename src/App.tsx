@@ -15,9 +15,16 @@ import { AdminPage } from './pages/AdminPage';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  // Don't show "Войти" while the session is still being checked: after a
+  // login redirect it looks like the login did nothing.
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    forumService.me().then((r) => setUser(r.user)).catch(() => setUser(null));
+    forumService
+      .me()
+      .then((r) => setUser(r.user))
+      .catch(() => setUser(null))
+      .finally(() => setAuthLoading(false));
   }, []);
 
   const doLogout = async () => {

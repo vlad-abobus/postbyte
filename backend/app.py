@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import os
 import re
@@ -52,7 +53,19 @@ def create_app() -> Flask:
                 max_upload_bytes,
             )
     app.config["MAX_CONTENT_LENGTH"] = max_upload_bytes
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+
+    # A random SECRET_KEY per process breaks sessions on serverless platforms:
+    # login succeeds on one instance, but /api/auth/me on another instance
+    # cannot decode the cookie and returns {"user": null}. If SECRET_KEY is not
+    # configured, derive a stable key from DATABASE_URL so all instances share
+    # it. Setting SECRET_KEY explicitly is still recommended.
+    secret_key = (os.getenv("SECRET_KEY") or "").strip()
+    secret_key_source = "set"
+    if not secret_key:
+        seed = (os.getenv("DATABASE_URL") or "postbytecl-local-dev").strip()
+        secret_key = hashlib.sha256(f"postbytecl-session:{seed}".encode("utf-8")).hexdigest()
+        secret_key_source = "derived"
+    app.config["SECRET_KEY"] = secret_key
     app.config["SESSION_COOKIE_HTTPONLY"] = True
 
     database_url = (os.getenv("DATABASE_URL") or "").strip().strip('"').strip("'")
@@ -105,7 +118,7 @@ def create_app() -> Flask:
         "[postbyte] startup: "
         f"vercel={bool(os.getenv('VERCEL'))} "
         f"database_url={'set' if os.getenv('DATABASE_URL') else 'missing'} "
-        f"secret_key={'set' if os.getenv('SECRET_KEY') else 'missing'} "
+        f"secret_key={secret_key_source} "
         f"max_upload_bytes={app.config['MAX_CONTENT_LENGTH']} "
         f"uploads_dir={app.config['UPLOADS_DIR']} "
         f"cloudinary={'on' if app.config['CLOUDINARY_ENABLED'] else 'off'} "
@@ -113,6 +126,12 @@ def create_app() -> Flask:
         f"cors_origins={parsed_cors_origins}",
         flush=True,
     )
+    if secret_key_source == "derived":
+        print(
+            "[postbyte] warning: SECRET_KEY is not set; using a stable fallback "
+            "derived from DATABASE_URL. Set SECRET_KEY in production.",
+            flush=True,
+        )
 
     # Captcha/session auth relies on browser cookies. For cross-origin frontend/api
     # deployments (e.g. separate Render domains), SameSite=None + Secure is required.
@@ -162,6 +181,14 @@ def create_app() -> Flask:
         if request.path.startswith("/api/"):
             return jsonify({"error": e.description or e.name, "status": e.code}), e.code
         return e
+
+    @app.after_request
+    def disable_cache_for_auth(response):
+        # Auth state depends on the session cookie. Never let a browser or edge
+        # cache reuse a stale {"user": null} response after login.
+        if request.path.startswith(("/api/auth/", "/api/admin/")) or request.path == "/api/captcha":
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     def _captcha_new() -> dict:
         chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"

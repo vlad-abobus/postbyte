@@ -65,5 +65,5 @@
 
 ## Demo
 
-- Live: [https://postbyte-2.onrender.com/](https://postbyte-2.onrender.com/)
+- Live: https://anywhere-mu.vercel.app/
 

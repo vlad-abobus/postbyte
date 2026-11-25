@@ -3,13 +3,16 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import ipaddress
 import os
 import re
 import secrets
+import socket
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from urllib.request import Request as UrlRequest, urlopen
 
 from sqlalchemy import inspect
 
@@ -825,6 +828,62 @@ def create_app() -> Flask:
         db.session.commit()
         _cleanup_image_blobs([deleted_image_url])
         return jsonify({"ok": True, "deletedThread": False})
+
+    @app.get("/api/media-proxy")
+    def media_proxy():
+        """
+        Fetch an external http(s) image/GIF so the browser-side NSFW detector
+        can inspect frames even when the remote host omits CORS headers.
+        """
+        _rate_limit("media_proxy", 2)
+        raw_url = (request.args.get("url") or "").strip()
+        if not raw_url:
+            abort(400, description="url is required")
+        parsed = urlparse(raw_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            abort(400, description="Invalid URL")
+
+        # SSRF protection: reject private, loopback, link-local, and reserved IPs.
+        try:
+            addr_infos = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80))
+        except socket.gaierror:
+            abort(400, description="Cannot resolve media host")
+        for info in addr_infos:
+            ip_str = info[4][0]
+            ip_obj = ipaddress.ip_address(ip_str)
+            if (
+                ip_obj.is_private
+                or ip_obj.is_loopback
+                or ip_obj.is_link_local
+                or ip_obj.is_multicast
+                or ip_obj.is_reserved
+                or ip_obj.is_unspecified
+            ):
+                abort(400, description="Disallowed media host")
+
+        max_bytes = min(current_app.config["MAX_CONTENT_LENGTH"], 4 * 1024 * 1024)
+        req = UrlRequest(
+            raw_url,
+            headers={"User-Agent": "AnyWhere-NSFW-Proxy/1.0", "Accept": "image/*,*/*;q=0.5"},
+        )
+        try:
+            with urlopen(req, timeout=8) as upstream:
+                content_type = (upstream.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+                if not content_type.startswith("image/"):
+                    abort(400, description="URL does not point to an image or GIF")
+                data = upstream.read(max_bytes + 1)
+        except HTTPException:
+            raise
+        except Exception:
+            abort(502, description="Failed to fetch remote media")
+
+        if len(data) > max_bytes:
+            abort(413, description="Remote media is too large to inspect")
+
+        response = Response(data, mimetype=content_type)
+        response.headers["Cache-Control"] = "private, max-age=300"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     @app.post("/api/uploads")
     def upload_image():

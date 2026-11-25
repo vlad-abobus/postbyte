@@ -7,6 +7,8 @@ import { Camera, Save, User as UserIcon } from 'lucide-react';
 import { PostItem } from '../components/PostItem';
 import { LoadingState } from '../components/LoadingState';
 import { useAuth } from '../lib/auth';
+import { checkMediaFile, checkMediaUrl } from '../lib/nsfwDetector';
+import { isValidHttpUrl } from '../lib/utils';
 
 export function ProfilePage() {
   const { uid } = useParams<{ uid: string }>();
@@ -60,6 +62,14 @@ export function ProfilePage() {
     setSaveError('');
     setSaving(true);
     try {
+      const trimmedAvatar = editData.photoURL.trim();
+      if (trimmedAvatar && trimmedAvatar !== (profile?.photoURL || '') && isValidHttpUrl(trimmedAvatar)) {
+        const check = await checkMediaUrl(trimmedAvatar);
+        if (!check.safe) {
+          setSaveError(`${check.reason || 'Обнаружен NSFW-контент в аватаре'}. Сохранение запрещено.`);
+          return;
+        }
+      }
       const updated = await forumService.updateMeProfile(editData);
       setProfile(updated);
       setAuthUser(updated);
@@ -131,6 +141,11 @@ export function ProfilePage() {
                       if (file) {
                         setAvatarUploading(true);
                         try {
+                          const check = await checkMediaFile(file);
+                          if (!check.safe) {
+                            alert(`${check.reason || 'Обнаружен NSFW-контент'}. Загрузка аватара запрещена.`);
+                            return;
+                          }
                           const updated = await forumService.uploadMyAvatar(file);
                           setProfile(updated);
                           setAuthUser(updated);

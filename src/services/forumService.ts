@@ -1,8 +1,12 @@
 import { Board, IpAction, Post, Report, Thread, User } from '../types';
 
-const API_BASE =
+export const API_BASE =
   (import.meta as any).env?.VITE_API_BASE?.toString().trim().replace(/\/+$/, '') ??
   ((import.meta as any).env?.DEV ? 'http://localhost:5000' : '');
+
+export function getMediaProxyUrl(url: string): string {
+  return `${API_BASE}/api/media-proxy?url=${encodeURIComponent(url)}`;
+}
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});

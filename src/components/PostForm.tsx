@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { forumService } from '../services/forumService';
-import { AlertCircle, Film, Image as ImageIcon, Link2, Upload, X } from 'lucide-react';
+import { AlertCircle, Film, Image as ImageIcon, Link2, ShieldAlert, ShieldCheck, Upload, X } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { extractFilenameFromUrl, isGifImage, isValidHttpUrl } from '../lib/utils';
+import {
+  checkMediaFile,
+  checkMediaUrl,
+  extractInlineGifUrls,
+  type NsfwCheckResult,
+  type NsfwProgress,
+} from '../lib/nsfwDetector';
 
 interface PostFormProps {
   boardId: string;
@@ -10,6 +17,22 @@ interface PostFormProps {
   onSuccess: () => void;
   onCancel?: () => void;
   isThread?: boolean;
+}
+
+type NsfwUiState =
+  | { status: 'idle' }
+  | { status: 'checking'; label: string }
+  | { status: 'safe'; result: NsfwCheckResult }
+  | { status: 'blocked'; reason: string }
+  | { status: 'error'; reason: string };
+
+function formatNsfwProgress(progress: NsfwProgress): string {
+  if (progress.stage === 'loading-model') return 'Загрузка NSFW-детектора...';
+  if (progress.stage === 'downloading') return 'Загрузка GIF для проверки...';
+  if (progress.totalFrames && progress.totalFrames > 1) {
+    return `Проверка GIF (${progress.currentFrame ?? 1}/${progress.totalFrames})...`;
+  }
+  return 'Проверка на NSFW...';
 }
 
 export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: PostFormProps) {
@@ -24,13 +47,16 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
   const [gifUrl, setGifUrl] = useState('');
   const [gifPreviewError, setGifPreviewError] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [nsfwState, setNsfwState] = useState<NsfwUiState>({ status: 'idle' });
   const [captcha, setCaptcha] = useState('');
   const [userCaptcha, setUserCaptcha] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const captchaCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const nsfwCheckSeqRef = useRef(0);
 
   // Simple static captcha for this demo
   const generateCaptcha = useMemo(() => {
@@ -52,19 +78,52 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
     setPostAs(me ? 'account' : 'anonymous');
   }, [me]);
 
+  // Preview + automatic NSFW check whenever a file is selected
   useEffect(() => {
     if (!file) {
       setFilePreviewUrl(null);
+      if (mediaMode === 'file') {
+        setNsfwState({ status: 'idle' });
+      }
       return;
     }
+
     const objectUrl = URL.createObjectURL(file);
     setFilePreviewUrl(objectUrl);
+
+    const seq = ++nsfwCheckSeqRef.current;
+    setNsfwState({ status: 'checking', label: 'Загрузка NSFW-детектора...' });
+
+    checkMediaFile(file, (progress) => {
+      if (nsfwCheckSeqRef.current === seq) {
+        setNsfwState({ status: 'checking', label: formatNsfwProgress(progress) });
+      }
+    })
+      .then((res) => {
+        if (nsfwCheckSeqRef.current !== seq) return;
+        if (res.safe) {
+          setNsfwState({ status: 'safe', result: res });
+        } else {
+          setNsfwState({ status: 'blocked', reason: res.reason || 'Обнаружен NSFW-контент' });
+        }
+      })
+      .catch((err: any) => {
+        if (nsfwCheckSeqRef.current !== seq) return;
+        setNsfwState({
+          status: 'error',
+          reason: err?.message || 'Не удалось проверить файл на NSFW',
+        });
+      });
+
     return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
+  }, [file, mediaMode]);
 
   useEffect(() => {
     setGifPreviewError(false);
-  }, [gifUrl]);
+    if (mediaMode === 'gifUrl') {
+      setNsfwState({ status: 'idle' });
+    }
+  }, [gifUrl, mediaMode]);
 
   useEffect(() => {
     const canvas = captchaCanvasRef.current;
@@ -115,7 +174,9 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
   }, [captcha]);
 
   const clearFile = () => {
+    nsfwCheckSeqRef.current += 1;
     setFile(null);
+    setNsfwState({ status: 'idle' });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -189,8 +250,61 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
       }
     }
 
+    if (mediaMode === 'file' && file && nsfwState.status === 'blocked') {
+      setError(`${nsfwState.reason}. Отправка запрещена.`);
+      return;
+    }
+
     setSubmitting(true);
+    setSubmitStatus(null);
     try {
+      // 1. Always enforce NSFW check before uploading/sending attached file
+      if (mediaMode === 'file' && file) {
+        if (nsfwState.status !== 'safe') {
+          setSubmitStatus('Проверка на NSFW...');
+          const check = await checkMediaFile(file, (progress) => {
+            setSubmitStatus(formatNsfwProgress(progress));
+          });
+          if (!check.safe) {
+            const reason = check.reason || 'Обнаружен NSFW-контент';
+            setNsfwState({ status: 'blocked', reason });
+            setError(`${reason}. Отправка запрещена.`);
+            return;
+          }
+          setNsfwState({ status: 'safe', result: check });
+        }
+      }
+
+      // 2. Enforce NSFW check on external GIF URL attachment
+      if (mediaMode === 'gifUrl' && trimmedGifUrl) {
+        setSubmitStatus('Проверка GIF по ссылке...');
+        const check = await checkMediaUrl(trimmedGifUrl, (progress) => {
+          setSubmitStatus(formatNsfwProgress(progress));
+        });
+        if (!check.safe) {
+          const reason = check.reason || 'Обнаружен NSFW-контент';
+          setNsfwState({ status: 'blocked', reason });
+          setError(`${reason}. Отправка запрещена.`);
+          return;
+        }
+        setNsfwState({ status: 'safe', result: check });
+      }
+
+      // 3. Enforce NSFW check on any inline .gif URLs pasted inside post text
+      const inlineGifs = extractInlineGifUrls(comment);
+      for (const inlineUrl of inlineGifs) {
+        setSubmitStatus('Проверка GIF в тексте...');
+        const check = await checkMediaUrl(inlineUrl, (progress) => {
+          setSubmitStatus(formatNsfwProgress(progress));
+        });
+        if (!check.safe) {
+          setError(`${check.reason || 'Обнаружен NSFW-контент в ссылке GIF'}. Отправка запрещена.`);
+          return;
+        }
+      }
+
+      setSubmitStatus(null);
+
       let imageObj = null;
       if (mediaMode === 'file' && file) {
         setUploadProgress(0);
@@ -227,9 +341,12 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
       setError(e.message || 'Не удалось отправить сообщение');
     } finally {
       setSubmitting(false);
+      setSubmitStatus(null);
       setUploadProgress(null);
     }
   };
+
+  const isBlockedByNsfw = mediaMode === 'file' && !!file && nsfwState.status === 'blocked';
 
   return (
     <form
@@ -318,7 +435,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitting) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitting && !isBlockedByNsfw) {
                   e.preventDefault();
                   (e.currentTarget.form as HTMLFormElement | null)?.requestSubmit();
                 }
@@ -375,7 +492,7 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                   accept="image/png,image/jpeg,image/gif,image/webp,.gif,.png,.jpg,.jpeg,.webp"
                 />
                 <div className="text-[10px] text-[var(--color-muted)]">
-                  PNG, JPG, анимированные GIF, WebP до 15 МБ. Большие гифки загружаются частями.
+                  PNG, JPG, анимированные GIF, WebP до 15 МБ. Перед отправкой автоматически проверяется через NSFW-детектор.
                 </div>
 
                 {file && filePreviewUrl && (
@@ -384,16 +501,19 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                       <img
                         src={filePreviewUrl}
                         alt={file.name}
-                        className="max-w-[110px] max-h-[90px] object-contain border border-[var(--color-border)] bg-[var(--color-board-bg)]"
+                        className={`max-w-[110px] max-h-[90px] object-contain border border-[var(--color-border)] bg-[var(--color-board-bg)] ${
+                          nsfwState.status === 'blocked' ? 'blur-md' : ''
+                        }`}
                       />
                       {fileIsGif && <span className="gif-badge">GIF</span>}
                     </div>
-                    <div className="flex-1 min-w-0 text-[10px] text-[var(--color-muted)] space-y-0.5">
+                    <div className="flex-1 min-w-0 text-[10px] text-[var(--color-muted)] space-y-1">
                       <div className="font-bold text-[var(--color-post-header)] truncate flex items-center gap-1">
                         {fileIsGif ? <Film size={11} /> : <ImageIcon size={11} />}
                         <span className="truncate">{file.name}</span>
                       </div>
                       <div>{Math.max(1, Math.round(file.size / 1024))} КБ</div>
+                      <NsfwStatusBadge state={nsfwState} />
                     </div>
                     <button
                       type="button"
@@ -428,18 +548,23 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
                   )}
                 </div>
                 <div className="text-[10px] text-[var(--color-muted)]">
-                  Вставьте прямую ссылку на .gif (Tenor, Giphy, Imgur и др.).
+                  Вставьте прямую ссылку на .gif (Tenor, Giphy, Imgur и др.). Перед отправкой проверится через NSFW-детектор.
                 </div>
                 {hasValidGifUrl && !gifPreviewError && (
-                  <div className="bg-white border border-[var(--color-border)] p-1.5 inline-block relative">
-                    <img
-                      src={trimmedGifUrl}
-                      alt="Предпросмотр GIF"
-                      referrerPolicy="no-referrer"
-                      onError={() => setGifPreviewError(true)}
-                      className="max-w-[160px] max-h-[120px] object-contain border border-[var(--color-border)]"
-                    />
-                    <span className="gif-badge">GIF</span>
+                  <div className="space-y-1">
+                    <div className="bg-white border border-[var(--color-border)] p-1.5 inline-block relative">
+                      <img
+                        src={trimmedGifUrl}
+                        alt="Предпросмотр GIF"
+                        referrerPolicy="no-referrer"
+                        onError={() => setGifPreviewError(true)}
+                        className={`max-w-[160px] max-h-[120px] object-contain border border-[var(--color-border)] ${
+                          nsfwState.status === 'blocked' ? 'blur-md' : ''
+                        }`}
+                      />
+                      <span className="gif-badge">GIF</span>
+                    </div>
+                    {nsfwState.status !== 'idle' && <NsfwStatusBadge state={nsfwState} />}
                   </div>
                 )}
                 {hasValidGifUrl && gifPreviewError && (
@@ -477,13 +602,15 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
           />
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || isBlockedByNsfw}
             className="bg-[var(--color-accent)] text-white font-bold p-1 px-4 cursor-pointer hover:bg-[var(--color-accent-hover)] disabled:opacity-50"
           >
             {submitting
-              ? uploadProgress !== null
-                ? `Загрузка ${uploadProgress}%`
-                : 'Отправка...'
+              ? submitStatus
+                ? submitStatus
+                : uploadProgress !== null
+                  ? `Загрузка ${uploadProgress}%`
+                  : 'Отправка...'
               : 'Отправить'}
           </button>
         </div>
@@ -496,5 +623,46 @@ export function PostForm({ boardId, threadId, onSuccess, onCancel, isThread }: P
         )}
       </div>
     </form>
+  );
+}
+
+function NsfwStatusBadge({ state }: { state: NsfwUiState }) {
+  if (state.status === 'idle') return null;
+
+  if (state.status === 'checking') {
+    return (
+      <div className="inline-flex items-center gap-1.5 text-[10px] text-[var(--color-post-header)] font-bold">
+        <span className="loader-inline-spinner" aria-hidden="true" />
+        <span>{state.label}</span>
+      </div>
+    );
+  }
+
+  if (state.status === 'safe') {
+    const frames = state.result.framesChecked;
+    return (
+      <div className="inline-flex items-center gap-1 text-[10px] text-[var(--color-accent)] font-bold">
+        <ShieldCheck size={12} />
+        <span>
+          NSFW-проверка пройдена{frames > 1 ? ` (${frames} кадр.)` : ''}
+        </span>
+      </div>
+    );
+  }
+
+  if (state.status === 'blocked') {
+    return (
+      <div className="inline-flex items-center gap-1 text-[10px] text-red-700 font-bold">
+        <ShieldAlert size={12} className="shrink-0" />
+        <span>{state.reason}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1 text-[10px] text-amber-700 font-bold">
+      <AlertCircle size={12} className="shrink-0" />
+      <span>{state.reason}</span>
+    </div>
   );
 }
